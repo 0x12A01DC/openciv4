@@ -1,0 +1,41 @@
+name: Bug or crash
+description: Something in the game does not work as in the original, or the engine stops.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: openciv4 version
+      description: The release name, or the commit if you built it yourself.
+    validations:
+      required: true
+  - type: input
+    id: mod
+    attributes:
+      label: Mod
+      description: Its name and version, or "none" for Beyond the Sword itself.
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected (what the original game does) and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: openciv4.log
+      description: Attach openciv4.log from the engine folder. After a crash it ends with the stack trace.
+    validations:
+      required: true
+  - type: textarea
+    id: save
+    attributes:
+      label: Save and screenshots
+      description: An autosave from before it happened (Documents\My Games\openciv4\Saves\auto) makes most bugs reproducible. Zip it to attach it.
+  - type: input
+    id: system
+    attributes:
+      label: Windows version and graphics card

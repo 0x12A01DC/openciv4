@@ -1,0 +1,3 @@
+[submodule "gamecore"]
+	path = gamecore
+	url = https://github.com/bssth/openciv4-dll.git

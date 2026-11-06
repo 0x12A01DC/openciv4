@@ -1,0 +1,36 @@
+name: Mod game core port
+description: Problems porting a mod's CvGameCoreDLL to 64-bit, or a ported DLL that misbehaves.
+labels: [mod-port]
+body:
+  - type: input
+    id: mod
+    attributes:
+      label: Mod and the version of its DLL sources
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Where it stops
+      description: The sections of docs/PORTING.md in openciv4-dll.
+      options:
+        - Building (compile or link errors)
+        - Exports (check-exports.ps1, "does not export what the engine uses")
+        - XML loading
+        - AI autoplay (crash, checksums differ)
+        - Saves
+        - Playing
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: The command line you ran and its output, or the build errors.
+    validations:
+      required: true
+  - type: input
+    id: sources
+    attributes:
+      label: Port's repository
+      description: A link, if the port is public.

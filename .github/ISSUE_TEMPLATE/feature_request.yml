@@ -1,0 +1,16 @@
+name: Missing feature
+description: Something the original game has that openciv4 does not do yet.
+labels: [missing]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What is missing
+      description: What the original game does there (a screenshot of the original helps).
+    validations:
+      required: true
+  - type: input
+    id: mod
+    attributes:
+      label: Mod
+      description: If it only shows with a mod.
