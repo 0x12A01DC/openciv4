@@ -1,0 +1,2 @@
+// The executable's icon (Explorer shows the first icon resource; the map window uses it too).
+1 ICON "openciv4.ico"
