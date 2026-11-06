@@ -1,0 +1,369 @@
+#include "render/PopupPanel.h"
+#include "render/Input.h"
+
+#include <windows.h>
+
+#include <algorithm>
+#include <cmath>
+#include <utility>
+
+namespace oc4::render
+{
+	namespace
+	{
+		using Kind = MapWindow::PopupView::Item::Kind;
+
+		std::wstring widen(std::string_view s)
+		{
+			if (s.empty())
+				return {};
+			const int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), int(s.size()), nullptr, 0);
+			std::wstring w(size_t(n), L'\0');
+			MultiByteToWideChar(CP_UTF8, 0, s.data(), int(s.size()), w.data(), n);
+			return w;
+		}
+
+		// (as the game's popups: their width, margins, the choices' pictures, the OK button's height)
+		constexpr float kWidth = 396, kPadX = 21, kPadTop = 18, kPadBottom = 20, kIcon = 28, kOk = 24;
+		constexpr Color kPanel{ 0.05f, 0.06f, 0.09f }, kEdge{ 0.78f, 0.64f, 0.36f }, kText{ 0.97f, 0.97f, 0.97f }, kHot{ 1, 0.83f, 0.49f };
+		constexpr Color kButton{ 0.13f, 0.16f, 0.22f }, kButtonHover{ 0.24f, 0.31f, 0.44f }, kEditFill{ 0.09f, 0.11f, 0.2f }, kEditRim{ 0.62f, 0.72f, 0.9f };
+
+		bool chooses(Kind k) { return k == Kind::Button || k == Kind::Radio || k == Kind::Check || k == Kind::Edit; }
+
+		std::string narrow(const std::wstring& w)
+		{
+			if (w.empty())
+				return {};
+			const int n = WideCharToMultiByte(CP_UTF8, 0, w.data(), int(w.size()), nullptr, 0, nullptr, nullptr);
+			std::string s(size_t(n), '\0');
+			WideCharToMultiByte(CP_UTF8, 0, w.data(), int(w.size()), s.data(), n, nullptr, nullptr);
+			return s;
+		}
+	}
+
+	void PopupPanel::set(const MapWindow::PopupView* view)
+	{
+		if (!view)
+		{
+			m_view.reset();
+			m_items.clear();
+			m_hover = -1;
+			return;
+		}
+		if (m_view && m_view->serial == view->serial)
+			return;
+		m_view = *view;
+		m_checked.assign(view->items.size(), false);
+		m_edits.assign(view->items.size(), std::wstring());
+		m_focus = -1;
+		for (size_t i = 0; i < view->items.size(); ++i)
+		{
+			m_checked[i] = view->items[i].checked;
+			if (view->items[i].kind == Kind::Edit)
+			{
+				m_edits[i] = widen(view->items[i].text);
+				if (m_focus < 0)
+					m_focus = int(i); // (the first one has the focus)
+			}
+		}
+		m_items.clear();
+		m_answered = false;
+		m_scroll = 0;
+		m_hover = -1;
+		m_helpItem = -2;
+		m_hoverOk = false;
+	}
+
+	void PopupPanel::hover(int x, int y)
+	{
+		m_mouseX = x;
+		m_mouseY = y;
+		m_hover = -1;
+		m_hoverOk = false;
+		if (!m_view)
+			return;
+		const float fx = float(x), fy = float(y);
+		m_hoverOk = m_view->okButton && m_ok.contains(fx, fy);
+		if (!m_list.contains(fx, fy))
+			return;
+		for (size_t i = 0; i < m_items.size(); ++i)
+			if (m_items[i].contains(fx, fy) && chooses(m_view->items[i].kind))
+				m_hover = int(i);
+	}
+
+	bool PopupPanel::click(int x, int y)
+	{
+		if (!m_view)
+			return false;
+		hover(x, y);
+		if (m_answered)
+			return true;
+		if (m_hoverOk)
+			answer(-1);
+		else if (m_hover >= 0)
+		{
+			const auto& item = m_view->items[size_t(m_hover)];
+			if (item.kind == Kind::Button)
+				answer(m_hover);
+			else if (item.kind == Kind::Check)
+				m_checked[size_t(m_hover)] = !m_checked[size_t(m_hover)];
+			else if (item.kind == Kind::Edit)
+				m_focus = m_hover;
+			else if (item.kind == Kind::Radio)
+				for (size_t i = 0; i < m_view->items.size(); ++i)
+					if (m_view->items[i].kind == Kind::Radio && m_view->items[i].group == item.group)
+						m_checked[i] = int(i) == m_hover;
+		}
+		return true;
+	}
+
+	bool PopupPanel::wheel(int x, int y, int delta)
+	{
+		if (!contains(x, y))
+			return false;
+		m_scroll = std::clamp(m_scroll - float(delta) / 120 * 3 * 36, 0.0f, m_scrollMax);
+		hover(x, y);
+		return true;
+	}
+
+	bool PopupPanel::key(unsigned virtualKey)
+	{
+		if (!m_view)
+			return false;
+		if (virtualKey == key::Escape && !m_answered)
+		{
+			m_answer = MapWindow::PopupAnswer{ .dismissed = true };
+			m_answered = true;
+		}
+		else if (virtualKey == key::Return && m_view->okButton && !m_answered)
+			answer(-1);
+		return true;
+	}
+
+	bool PopupPanel::character(wchar_t c)
+	{
+		if (!m_view || m_answered || m_focus < 0 || size_t(m_focus) >= m_edits.size())
+			return false;
+		std::wstring& text = m_edits[size_t(m_focus)];
+		if (c == L'\b')
+		{
+			if (!text.empty())
+				text.pop_back();
+		}
+		else if (c >= L' ' && c != 0x7F && text.size() < 256)
+			text += c;
+		return true;
+	}
+
+	void PopupPanel::answer(int item)
+	{
+		MapWindow::PopupAnswer a;
+		a.item = item;
+		for (size_t i = 0; i < m_view->items.size(); ++i)
+		{
+			if (m_view->items[i].kind == Kind::Edit)
+				a.edits.push_back({ int(i), narrow(m_edits[i]) });
+			else if (m_checked[i])
+				(m_view->items[i].kind == Kind::Radio ? a.radio : a.checked).push_back(int(i));
+		}
+		m_answer = std::move(a);
+		m_answered = true;
+	}
+
+	void PopupPanel::draw(Overlay& o, const std::function<std::string(int)>& help)
+	{
+		if (!m_view)
+			return;
+		if (!m_skinsRead && m_theme.loaded())
+		{
+			// The theme's window without a title bar, as the game's popups are; its standard button
+			// (the OK); its tooltip; its fonts (the header's size 4, the rest 3, the help 2).
+			m_skinsRead = true;
+			m_glass = m_theme.skin("GFC_Control_DefaultWindow_Style", "GFC_CtrlTheme_Bitmap_Control_Window_Skin_Inner_Default");
+			m_frame = m_theme.skin("SF_CtrlTheme_Civ4_Control_Window_NoTitleBar_InFrameBorder_Normal_Style", "GFC_CtrlTheme_Bitmap_Control_Border_Skin_Full_Default");
+			m_tooltip = m_theme.skin("GFC_Control_StandardToolTip_Style", "GFC_CtrlTheme_Bitmap_Control_ToolTip_Skin_Inner_Default");
+			m_button = m_theme.button("BUTTON_STYLE_STANDARD");
+			m_headerSize = m_theme.font(4).size;
+			m_textSize = m_theme.font(3).size;
+			m_helpSize = m_theme.font(2).size;
+		}
+		const auto& items = m_view->items;
+		const float sw = o.screenWidth(), sh = o.screenHeight();
+		// As the game's: its width, at the right under the top bar (in the middle when narrow).
+		const float w = std::min(kWidth, sw - 40), inner = w - 2 * kPadX;
+		const bool right = sw >= 2.5f * w && !m_view->centered;
+		const float x0 = right ? sw - 20 - w : (sw - w) / 2;
+		const std::wstring header = widen(m_view->header);
+		std::vector<std::wstring> texts(items.size());
+		std::vector<float> heights(items.size());
+		float content = 0;
+		for (size_t i = 0; i < items.size(); ++i)
+		{
+			texts[i] = widen(items[i].text);
+			const bool icon = items[i].kind == Kind::Button && m_art.icon(items[i].icon);
+			switch (items[i].kind)
+			{
+			case Kind::Text: heights[i] = o.richHeight(texts[i], inner, m_textSize, false) + 10; break;
+			case Kind::Button: heights[i] = std::max(kIcon, o.richHeight(texts[i], inner - (icon ? kIcon + 5 : 0), m_textSize, false)) + 8; break;
+			case Kind::Radio:
+			case Kind::Check: heights[i] = std::max(26.0f, o.richHeight(texts[i], inner - 30, m_textSize, false) + 8); break;
+			case Kind::Separator: heights[i] = 12; break;
+			case Kind::Image: heights[i] = 72; break;
+			case Kind::Edit: heights[i] = 34; break;
+			}
+			content += heights[i];
+		}
+		const float headerHeight = header.empty() ? 0.0f : o.richHeight(header, inner, m_headerSize, false) + 10;
+		const float okHeight = m_view->okButton ? kOk + 10 : 0.0f;
+		float y0 = right ? 80.0f : 30.0f;
+		const float listHeight = std::max(0.0f, std::min(content, sh - y0 - 20 - headerHeight - okHeight - kPadTop - kPadBottom));
+		const float h = kPadTop + headerHeight + listHeight + okHeight + kPadBottom;
+		if (!right)
+			y0 = std::max(30.0f, (sh - h) / 2);
+		m_panel = { x0, y0, x0 + w, y0 + h };
+		if (!m_glass.empty() || !m_frame.empty())
+		{
+			Theme::draw(o, m_glass, x0, y0, x0 + w, y0 + h);
+			Theme::draw(o, m_frame, x0, y0, x0 + w, y0 + h);
+		}
+		else
+		{
+			o.rect(x0, y0, x0 + w, y0 + h, kPanel, 0.95f, 8);
+			o.frame(x0, y0, x0 + w, y0 + h, kEdge, 0.9f, 8, 1.5f);
+		}
+
+		float y = y0 + kPadTop;
+		if (!header.empty())
+		{
+			o.richBlock(header, x0 + kPadX, y, inner, m_headerSize, false, kText);
+			y += headerHeight;
+		}
+		m_list = { x0 + kPadX - 4, y, x0 + w - kPadX + 4, y + listHeight };
+		m_scrollMax = std::max(0.0f, content - listHeight);
+		m_scroll = std::clamp(m_scroll, 0.0f, m_scrollMax);
+		o.clip(m_list.x0, m_list.y0, m_list.x1, m_list.y1);
+		m_items.assign(items.size(), Rect{});
+		float iy = y - m_scroll;
+		const float rightEdge = x0 + w - kPadX - (m_scrollMax > 0 ? 10 : 0);
+		for (size_t i = 0; i < items.size(); ++i)
+		{
+			const auto& item = items[i];
+			const float ih = heights[i];
+			const Rect r{ x0 + kPadX, iy, rightEdge, iy + ih };
+			iy += ih;
+			if (r.y1 <= m_list.y0 || r.y0 >= m_list.y1)
+				continue;
+			m_items[i] = { r.x0, std::max(r.y0, m_list.y0), r.x1, std::min(r.y1, m_list.y1) };
+			const bool hot = int(i) == m_hover;
+			switch (item.kind)
+			{
+			case Kind::Text: o.richBlock(texts[i], r.x0, r.y0 + 4, r.x1 - r.x0, m_textSize, false, kText); break;
+			case Kind::Button:
+			{
+				// A choice: its picture and its text, gold under the mouse (its own colours stay).
+				float tx = r.x0;
+				if (const ButtonArt::Icon* ic = m_art.icon(item.icon))
+				{
+					const float iy0 = std::round(r.y0 + (ih - kIcon) / 2);
+					o.image(ic->key, ic->bgra, ic->width, ic->height, 1, r.x0, iy0, r.x0 + kIcon, iy0 + kIcon);
+					tx = r.x0 + kIcon + 5;
+				}
+				const float th = o.richHeight(texts[i], r.x1 - tx, m_textSize, false);
+				o.richBlock(texts[i], tx, std::round(r.y0 + (ih - th) / 2), r.x1 - tx, m_textSize, false, hot ? kHot : kText);
+				break;
+			}
+			case Kind::Radio:
+			case Kind::Check:
+			{
+				const float cx = r.x0 + 9, cy = r.y0 + 13;
+				if (item.kind == Kind::Radio)
+				{
+					o.ellipse(cx, cy, 7, 7, kEdge, 0.9f, 1.5f);
+					if (m_checked[i])
+						o.circle(cx, cy, 4, kHot, 1);
+				}
+				else
+				{
+					o.frame(cx - 7, cy - 7, cx + 7, cy + 7, kEdge, 0.9f, 2, 1.5f);
+					if (m_checked[i])
+						o.rect(cx - 4, cy - 4, cx + 4, cy + 4, kHot, 1, 1);
+				}
+				o.richBlock(texts[i], r.x0 + 26, r.y0 + 4, r.x1 - r.x0 - 30, m_textSize, false, hot ? kHot : kText);
+				break;
+			}
+			case Kind::Separator: o.line(r.x0, r.y0 + 6, r.x1, r.y0 + 6, kText, 0.3f); break;
+			case Kind::Edit:
+			{
+				// A box to type into, as the game's: dark, a light rim; the one with the focus shows where the text goes.
+				const bool focus = int(i) == m_focus;
+				const float by0 = r.y0 + 4, by1 = by0 + 25;
+				o.rect(r.x0, by0, r.x1, by1, kEditFill, 0.95f, 3);
+				o.frame(r.x0, by0, r.x1, by1, kEditRim, focus ? 0.95f : 0.6f, 3, 1);
+				o.text(m_edits[i] + (focus ? L"|" : L""), r.x0 + 6, by0 + (25 - m_textSize * 1.3f) / 2, m_textSize, kText);
+				break;
+			}
+			case Kind::Image:
+				if (const ButtonArt::Icon* ic = m_art.icon(item.icon))
+				{
+					// (64 high, as wide as its proportions have it: the game menu's title is 4:1)
+					const float cx = (r.x0 + r.x1) / 2, hw = std::min(32.0f * float(ic->width) / float(std::max(ic->height, 1u)), (r.x1 - r.x0) / 2);
+					o.image(ic->key, ic->bgra, ic->width, ic->height, 1, cx - hw, r.y0 + 4, cx + hw, r.y0 + 68);
+				}
+				break;
+			}
+		}
+		o.unclip();
+		if (m_scrollMax > 0)
+		{
+			// Where the list is.
+			const float track = m_list.y1 - m_list.y0, thumb = std::max(24.0f, track * listHeight / content);
+			const float ty = m_list.y0 + (track - thumb) * (m_scroll / m_scrollMax);
+			o.rect(x0 + w - kPadX - 4, ty, x0 + w - kPadX + 1, ty + thumb, kEdge, 0.6f, 2);
+		}
+		m_ok = {};
+		if (m_view->okButton)
+		{
+			// The OK: the theme's stone button across the window, dark text on it.
+			const float bx = x0 + kPadX, bx1 = x0 + w - kPadX, by = y0 + h - kPadBottom - kOk;
+			m_ok = { bx, by, bx1, by + kOk };
+			const Theme::Skin* skin = m_button ? &m_button->skin[m_hoverOk && !m_button->skin[1].empty() ? 1 : 0] : nullptr;
+			if (skin && !skin->empty())
+				Theme::draw(o, *skin, bx, by, bx1, by + kOk);
+			else
+			{
+				o.rect(bx, by, bx1, by + kOk, m_hoverOk ? kButtonHover : kButton, 0.95f, 5);
+				o.frame(bx, by, bx1, by + kOk, kEdge, 0.8f, 5, 1);
+			}
+			const size_t st = m_hoverOk ? 1 : 0;
+			const bool coloured = m_button && m_button->coloured;
+			if (coloured)
+				o.setShadow(m_button->shadow[st], m_button->shadowAlpha[st]);
+			o.richText(L"OK", (bx + bx1) / 2, by + (kOk - m_textSize * 1.3f) / 2, m_textSize, false, coloured ? m_button->text[st] : kText,
+				coloured ? m_button->textAlpha[st] : 1, Overlay::Align::Center);
+			o.resetShadow();
+		}
+
+		// The help for what is under the mouse, in the theme's tooltip beside the window.
+		if (m_hover != m_helpItem)
+		{
+			m_helpItem = m_hover;
+			m_help = m_hover >= 0 && help ? widen(help(m_hover)) : std::wstring();
+		}
+		if (!m_help.empty() && m_hover >= 0 && size_t(m_hover) < m_items.size())
+		{
+			const float tw = 260, th = o.richHeight(m_help, tw - 20, m_helpSize, false) + 10;
+			float tx = x0 - tw + 16;
+			if (tx < 8)
+				tx = std::min(x0 + w - 16, sw - tw - 8);
+			const float ty = std::clamp(m_items[size_t(m_hover)].y0 - 10, 8.0f, std::max(8.0f, sh - th - 8));
+			if (!m_tooltip.empty())
+				Theme::draw(o, m_tooltip, tx, ty, tx + tw, ty + th);
+			else
+			{
+				o.rect(tx, ty, tx + tw, ty + th, kPanel, 0.95f, 6);
+				o.frame(tx, ty, tx + tw, ty + th, kEdge, 0.6f, 6, 1);
+			}
+			o.richBlock(m_help, tx + 10, ty + 5, tw - 20, m_helpSize, false, kText);
+		}
+	}
+}
