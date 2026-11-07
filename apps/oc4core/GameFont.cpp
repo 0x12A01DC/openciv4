@@ -139,9 +139,9 @@ namespace oc4::host
 			}
 			int player = ours ? gDLL->getDiplomacyPlayer() : int(GC.getGame().getActivePlayer());
 			// (a leader's text read outside its talk: the last leader talked to)
-			if (ours && (player < 0 || player >= MAX_PLAYERS))
+			if (ours && (player < 0 || player >= GC.getMAX_PLAYERS()))
 				player = g_lastDiplomacyPlayer;
-			if (player < 0 || player >= MAX_PLAYERS)
+			if (player < 0 || player >= GC.getMAX_PLAYERS())
 				return false;
 			CvWString replaced;
 			const CvWString wanted((L"[" + key).c_str());

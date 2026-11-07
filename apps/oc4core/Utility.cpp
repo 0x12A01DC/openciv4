@@ -288,7 +288,7 @@ namespace oc4::host
 		case Command::DiploEvent:
 		{
 			const int who = r.i32(), event = r.i32(), d1 = r.i32(), d2 = r.i32();
-			if (player >= 0 && player < MAX_PLAYERS)
+			if (player >= 0 && player < GC.getMAX_PLAYERS())
 				CvPlayerAI::getPlayerNonInl(player).handleDiploEvent(DiploEventTypes(event), PlayerTypes(who), d1, d2);
 			break;
 		}
@@ -298,7 +298,7 @@ namespace oc4::host
 			CLinkList<TradeData> ours, theirs;
 			r.trades(ours);
 			r.trades(theirs);
-			if (player >= 0 && player < MAX_PLAYERS)
+			if (player >= 0 && player < GC.getMAX_PLAYERS())
 				GC.getGame().implementDeal(player, other, &ours, &theirs);
 			break;
 		}
@@ -309,12 +309,12 @@ namespace oc4::host
 		case Command::PlayerOption:
 		{
 			const int option = r.i32(), value = r.i32();
-			if (player >= 0 && player < MAX_PLAYERS)
+			if (player >= 0 && player < GC.getMAX_PLAYERS())
 				CvPlayerAI::getPlayerNonInl(player).setOption(PlayerOptionTypes(option), value != 0);
 			break;
 		}
 		case Command::MakeAI:
-			if (player >= 0 && player < MAX_CIV_PLAYERS && player != GC.getGame().getActivePlayer())
+			if (player >= 0 && player < GC.getMAX_CIV_PLAYERS() && player != GC.getGame().getActivePlayer())
 			{
 				GC.getInitCore().setSlotStatus(player, SS_COMPUTER);
 				CvPlayerAI::getPlayerNonInl(player).updateHuman();

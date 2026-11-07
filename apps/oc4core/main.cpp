@@ -840,7 +840,7 @@ namespace
 				else if (net.status().ends_with("the host has left"))
 				{
 					net.stop();
-					for (int p = 0; p < MAX_CIV_PLAYERS; ++p)
+					for (int p = 0; p < GC.getMAX_CIV_PLAYERS(); ++p)
 						if (p != game.getActivePlayer() && GC.getInitCore().getSlotStatus(static_cast<PlayerTypes>(p)) == SS_TAKEN)
 						{
 							GC.getInitCore().setSlotStatus(static_cast<PlayerTypes>(p), SS_COMPUTER);
@@ -2033,7 +2033,7 @@ int wmain(int argc, wchar_t** argv)
 				const PlayerTypes mine = GC.getGame().getActivePlayer();
 				std::vector<int> humans{ int(mine) };
 				for (int pass = 0; pass < 2; ++pass)
-					for (int p = 0; p < MAX_CIV_PLAYERS && int(humans.size()) < played.humans; ++p)
+					for (int p = 0; p < GC.getMAX_CIV_PLAYERS() && int(humans.size()) < played.humans; ++p)
 					{
 						const CvPlayerAI& pl = CvPlayerAI::getPlayerNonInl(static_cast<PlayerTypes>(p));
 						if (pl.isAlive() && !pl.isBarbarian() && std::ranges::find(humans, p) == humans.end() && (pass == 1 || pl.isHuman()))

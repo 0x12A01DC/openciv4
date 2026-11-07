@@ -207,7 +207,7 @@ namespace oc4::host
 		InterfaceMessageTypes eType, LPCSTR pszIcon, ColorTypes eFlashColor, int iFlashX, int iFlashY, bool bShowOffScreenArrows,
 		bool bShowOnScreenArrows)
 	{
-		if (ePlayer < 0 || ePlayer >= MAX_PLAYERS)
+		if (ePlayer < 0 || ePlayer >= GC.getMAX_PLAYERS())
 			return;
 		if (eType != MESSAGE_TYPE_DISPLAY_ONLY)
 			CvPlayerAI::getPlayerNonInl(ePlayer).addMessage(CvTalkingHeadMessage(GC.getGame().getGameTurn(), iLength, szString.c_str(), pszSound, eType,
@@ -221,14 +221,14 @@ namespace oc4::host
 
 	void Interface::addCombatMessage(PlayerTypes ePlayer, CvWString szString)
 	{
-		if (ePlayer >= 0 && ePlayer < MAX_PLAYERS)
+		if (ePlayer >= 0 && ePlayer < GC.getMAX_PLAYERS())
 			CvPlayerAI::getPlayerNonInl(ePlayer).addMessage(CvTalkingHeadMessage(GC.getGame().getGameTurn(), GC.getEVENT_MESSAGE_TIME(), szString.c_str(),
 				nullptr, MESSAGE_TYPE_COMBAT_MESSAGE));
 	}
 
 	void Interface::addQuestMessage(PlayerTypes ePlayer, CvWString szString, int /*iQuestId*/)
 	{
-		if (ePlayer >= 0 && ePlayer < MAX_PLAYERS)
+		if (ePlayer >= 0 && ePlayer < GC.getMAX_PLAYERS())
 			CvPlayerAI::getPlayerNonInl(ePlayer).addMessage(CvTalkingHeadMessage(GC.getGame().getGameTurn(), GC.getEVENT_MESSAGE_TIME(), szString.c_str(),
 				nullptr, MESSAGE_TYPE_QUEST));
 	}
