@@ -48,7 +48,7 @@ Texture2D<float> groundHeights : register(t0, space0); // vertex shader: the ter
 SamplerState groundSampler : register(s0, space0);
 Texture2D baseMap : register(t0, space2);
 Texture2D decalMap : register(t1, space2);
-Texture2D<uint4> fogPlots : register(t2, space2);      // the plots, for the fog of war
+Texture2D fogPlots : register(t2, space2);             // the plots (16-bit unorm), for the fog of war
 Texture2D leaderEnv : register(t3, space2);            // a leader's maps (flags bit 11)
 Texture2D leaderNormals : register(t4, space2);
 Texture2D leaderSpecular : register(t5, space2);
@@ -83,7 +83,7 @@ float fogAt(float2 xy)
 		int2 q = cell + int2(i & 1, i >> 1);
 		q.x = (wrap & 1) ? (q.x % size.x + size.x) % size.x : clamp(q.x, 0, size.x - 1);
 		q.y = (wrap & 2) ? (q.y % size.y + size.y) % size.y : clamp(q.y, 0, size.y - 1);
-		const uint a = fogPlots.Load(int3(q, 0)).a;
+		const uint a = uint(round(fogPlots.Load(int3(q, 0)).a * 65535.0));
 		k[i] = float2((a & 4) ? 1 : 0, (a & 8) ? 1 : 0);
 	}
 	const float2 v = lerp(lerp(k[0], k[1], w.x), lerp(k[2], k[3], w.x), w.y);
@@ -357,7 +357,7 @@ float4 PSOverlay(Out p) : SV_Target
 			case TextureFormat::BC3: return SDL_GPU_TEXTUREFORMAT_BC3_RGBA_UNORM;
 			case TextureFormat::R8: return SDL_GPU_TEXTUREFORMAT_R8_UNORM;
 			case TextureFormat::R32Float: return SDL_GPU_TEXTUREFORMAT_R32_FLOAT;
-			case TextureFormat::RGBA16Uint: return SDL_GPU_TEXTUREFORMAT_R16G16B16A16_UINT;
+			case TextureFormat::RGBA16: return SDL_GPU_TEXTUREFORMAT_R16G16B16A16_UNORM;
 			}
 			return SDL_GPU_TEXTUREFORMAT_INVALID;
 		}
@@ -530,7 +530,7 @@ float4 PSOverlay(Out p) : SV_Target
 		m_noHeights = createTexture(1, 1, 1, 1, TextureFormat::R32Float, std::span(&heights, 1));
 		const uint16_t seen[4]{ 0, 0, 0, 0xC };
 		const std::span<const uint8_t> plots(reinterpret_cast<const uint8_t*>(seen), 8);
-		m_noPlots = createTexture(1, 1, 1, 1, TextureFormat::RGBA16Uint, std::span(&plots, 1));
+		m_noPlots = createTexture(1, 1, 1, 1, TextureFormat::RGBA16, std::span(&plots, 1));
 	}
 
 	SDL_GPUGraphicsPipeline* Renderer::pipeline(const PipelineKey& key)

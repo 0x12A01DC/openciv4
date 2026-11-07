@@ -43,7 +43,8 @@ namespace oc4::render
 
 	enum class TextureFormat : uint8_t
 	{
-		BGRA8, BC1, BC2, BC3, R8, R32Float, RGBA16Uint
+		// RGBA16 is unorm: SDL GPU cannot sample integer formats, so shaders read whole values as round(v * 65535).
+		BGRA8, BC1, BC2, BC3, R8, R32Float, RGBA16
 	};
 
 	// A texture (2D or an array of them) on the GPU, released with its last owner.
@@ -215,7 +216,7 @@ float3 globeBend(float3 p)
 
 		// The terrain's heights (R32Float, sample (i, j) at (i, j) * cellSize) for models drawn on the ground.
 		void setGround(const GpuImage* heights, float cellSize, uint32_t columns, uint32_t rows, float wrapWidth);
-		// The fog of war over the models, as the terrain shows it: the plots (RGBA16Uint, bit 2 of
+		// The fog of war over the models, as the terrain shows it: the plots (RGBA16, bit 2 of
 		// alpha revealed, bit 3 visible) of plotSize; nullptr for none.
 		void setFog(const GpuImage* plots, float plotSize, uint32_t columns, uint32_t rows, bool wrapX, bool wrapY);
 

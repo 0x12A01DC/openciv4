@@ -52,7 +52,7 @@ cbuffer Terrain : register(b1, UNIFORMS)
 	float4 playerColors[256];
 };
 
-Texture2D<uint4> plots : register(t0, space2);   // terrain, overlay terrain (hills, peaks), owner + 1, flags
+Texture2D plots : register(t0, space2);          // 16-bit unorm: terrain, overlay terrain (hills, peaks), owner + 1, flags
 Texture2DArray atlas : register(t1, space2);     // 32 tiles per terrain
 Texture2DArray decals : register(t2, space2);    // features painted on the ground (flood plains)
 Texture2DArray details : register(t3, space2);   // the terrains' detail textures (grey around one half)
@@ -90,7 +90,7 @@ int2 wrapPlot(int2 p)
 	return p;
 }
 
-uint4 plotAt(int2 p) { return plots.Load(int3(wrapPlot(p), 0)); }
+uint4 plotAt(int2 p) { return uint4(round(plots.Load(int3(wrapPlot(p), 0)) * 65535.0)); }
 
 uint hash(int2 c, uint salt)
 {
@@ -1314,7 +1314,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 			if (!plotTex || plotTex->width != uint32_t(W) || plotTex->height != uint32_t(H))
 			{
 				const std::span<const uint8_t> bytes(reinterpret_cast<const uint8_t*>(data.data()), data.size() * 2);
-				plotTex = renderer.createTexture(uint32_t(W), uint32_t(H), 1, 1, TextureFormat::RGBA16Uint, std::span(&bytes, 1));
+				plotTex = renderer.createTexture(uint32_t(W), uint32_t(H), 1, 1, TextureFormat::RGBA16, std::span(&bytes, 1));
 			}
 			else
 				renderer.updateTexture(*plotTex, 0, 0, 0, 0, uint32_t(W), uint32_t(H), data.data());
