@@ -255,7 +255,10 @@ namespace oc4::render
 			else
 				camera.target.x = std::clamp(camera.target.x, 0.0f, size.x);
 			camera.target.y = std::clamp(camera.target.y, 0.0f, size.y);
-			camera.target.z = std::max(0.0f, view->groundHeight(camera.target.x, camera.target.y));
+			// A fixed focus plane: following the ground under the centre made the view rise and
+			// fall while panning over hills and peaks. Land sits near 0 and peaks stay well below
+			// the eye even at the closest zoom.
+			camera.target.z = 0;
 		}
 
 		void lookAt(int x, int y, float distance = 9)
