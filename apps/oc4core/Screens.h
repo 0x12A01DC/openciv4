@@ -136,6 +136,7 @@ namespace oc4::host
 		int m_hovered = -1;
 		std::pair<int, int> m_mouse{ -1, -1 }; // where the mouse was at the clicks taken
 		unsigned m_diploVersion = 0;           // the talk the diplomacy screen shows
+		std::vector<std::pair<int, std::wstring>> m_talkAnswers; // the player's answers in it, last frame
 		long long m_minimapVersion = 0;        // the screen minimap the window has
 		std::chrono::steady_clock::time_point m_lastUpdate; // when the screens were last updated
 		bool m_diploActive = false;

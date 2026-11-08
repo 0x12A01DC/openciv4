@@ -39,6 +39,8 @@ namespace oc4::render
 		std::optional<MapWindow::PopupAnswer> takeAnswer() { return std::exchange(m_answer, std::nullopt); }
 
 		void draw(Overlay& overlay, const std::function<std::string(int item)>& help);
+		// The keys have chosen something (Tab started it): the arrows are the popup's, not the map's.
+		bool keyboardChoice() const { return m_keyboard; }
 
 	private:
 		struct Rect

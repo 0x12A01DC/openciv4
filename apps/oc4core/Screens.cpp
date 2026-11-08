@@ -843,7 +843,19 @@ if _walls:
 		}
 		window.setWasdPan(m_utility.wasdPan());
 		g_display = window.uiDisplay();
-		window.setUiTakesKeys(menuUp());
+		window.setUiTakesKeys(menuUp(), !m_menu);
+		// (new answers in a talk: the keyboard's choice was among the old ones, and Return is the
+		// talk's own again)
+		{
+			std::vector<std::pair<int, std::wstring>> answers;
+			for (const Diplomacy::Comment& c : m_utility.diplomacy().userComments())
+				answers.emplace_back(c.comment, c.text);
+			if (answers != m_talkAnswers)
+			{
+				window.clearKeyChoice();
+				m_talkAnswers = std::move(answers);
+			}
+		}
 		if (!m_active)
 			return;
 		if (m_menu)

@@ -173,7 +173,7 @@ namespace oc4::render
 		}
 		else if (virtualKey == key::Up || virtualKey == key::Left)
 			moveChoice(-1);
-		else if (virtualKey == key::Down || virtualKey == key::Right)
+		else if (virtualKey == key::Down || virtualKey == key::Right || virtualKey == key::Tab)
 			moveChoice(1);
 		else if (virtualKey == key::Return)
 		{

@@ -144,15 +144,17 @@ The interface has a scale of its own: the Screen Resolution choice on the option
 (Auto follows the window's pixel density), or `--ui-scale PERCENT` for one run. The map keeps
 all the window's pixels.
 
-With a menu, a popup or a screen up, the arrow keys move between its controls instead of the
-map, and Return or Space uses the one chosen (a ring marks it; moving the mouse ends it).
+With a menu, a popup or a screen up, Tab (Shift+Tab back) starts choosing its controls with the
+keys: then the arrow keys move between them instead of the map, and Return or Space uses the one
+chosen (a ring marks it; moving the mouse ends it). Until then the arrows pan the map under it, as
+in the original; in the main menu, with no map behind, they choose at once.
 
 Ctrl+Shift+F shows the frame rate and the longest frame of the last half second (`--show-fps`
 from the start).
 
-W A S D can pan the map as the arrows do, an option that is off by default: Ctrl+Shift+W turns it
-on and off (a note at the top says which), and so does "Pan the map with W A S D" on the options'
-Game tab; it is kept in profile.ini as `wasdPan`, and `--wasd-pan` turns it on for one run. Only
+W A S D can pan the map as the arrows do, an option that is off by default: "Pan the map with
+W A S D" on the options' Game tab turns it on and off, and while it is on Ctrl+Shift+W turns it off
+too (a note at the top says so; with the option off, Ctrl+Shift+W is the game's own); it is kept in profile.ini as `wasdPan`, and `--wasd-pan` turns it on for one run. Only
 the letters pressed alone pan, so while it is on their own hotkeys (S Sentry, A Automate, W the
 next unit, D destroy) need the unit's buttons; with Shift, Ctrl or Alt they are still the game's
 (Ctrl+S saves, Shift+D is diplomacy), and with a menu, a popup or a screen up they are letters

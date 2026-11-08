@@ -234,7 +234,7 @@ namespace oc4::host
 		void setUiScale(int percent) { m_uiScale = percent; }
 		void forceUiScale(int percent) { m_forcedUiScale = percent; }
 		// W A S D pan the map (the profile's, or --wasd-pan's for the session until the player
-		// chooses: Ctrl+Shift+W or the options' check box).
+		// chooses: the options' check box, or Ctrl+Shift+W to turn it off).
 		bool wasdPan() const { return m_forcedWasdPan || m_wasdPan; }
 		void setWasdPan(bool on) { m_wasdPan = on; }
 		void forceWasdPan() { m_forcedWasdPan = true; }

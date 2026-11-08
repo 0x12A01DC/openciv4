@@ -21,7 +21,7 @@
 // opens it, Esc closes it), or with --own-interface the window's simple one.
 // --keys are typed in on your turns then (letters and Space as keys, '^', '@' and '+' before
 // one hold Ctrl, Alt and Shift, '>' ends the turn, '~' is Esc, "(x,y)" right clicks that plot,
-// "[x,y]" left clicks it, "%u", "%d", "%l", "%r" and "%e" type an arrow or Return into the window, "<x,y>" clicks that pixel of the window (a figure there: its unit), "#n" picks the n-th button of the popup up (OK if it has none), a
+// "[x,y]" left clicks it, "%u", "%d", "%l", "%r", "%e" and "%t" type an arrow, Return or Tab into the window, "<x,y>" clicks that pixel of the window (a figure there: its unit), "#n" picks the n-th button of the popup up (OK if it has none), a
 // popup nothing answers gets its first, 'text' goes into its next edit box, "{Name}" or
 // "{Name/part}" clicks the interface's widget so named, "^{Name}" with Ctrl held, "?{Name}" rests
 // the mouse on it); with
@@ -352,6 +352,7 @@ namespace
 		case 'l': return render::key::Left;
 		case 'r': return render::key::Right;
 		case 'e': return render::key::Return;
+		case 't': return render::key::Tab;
 		default: return 0;
 		}
 	}
@@ -974,7 +975,7 @@ namespace
 				int button = -1;
 				if (script.front() == '%' && script.size() > 1)
 				{
-					// "%u", "%d", "%l", "%r", "%e": an arrow or Return typed into the window, as a player's.
+					// "%u", "%d", "%l", "%r", "%e", "%t": an arrow, Return or Tab typed into the window, as a player's.
 					if (const unsigned k = scriptedKey(script[1]))
 						window.pressKey(k);
 					script.erase(0, 2);

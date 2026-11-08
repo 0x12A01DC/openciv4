@@ -125,7 +125,8 @@ namespace oc4::render
 		int mouseX = -1, mouseY = -1; // (in the interface's units, as the screens are)
 		int uiPercent = 0; // (0: the window's density)
 		bool showFrameRate = false; // (Ctrl+Shift+F)
-		bool uiTakesKeys = false;   // a menu or a screen over the map has the arrows
+		bool uiTakesKeys = false;   // a menu or a screen over the map has the arrows (after Tab)
+		bool uiMapBehind = true;    // (no map behind it, the main menu: the arrows are its at once)
 		bool wasdPan = false;       // W A S D pan the map too (Ctrl+Shift+W, WasdPan.h)
 		std::optional<bool> wasdToggled; // (Ctrl+Shift+W since asked: the profile's to keep)
 		std::chrono::steady_clock::time_point wasdNoteUntil{}; // (the toggle's note shown till then)
@@ -335,9 +336,25 @@ namespace oc4::render
 			return { -1, -1 };
 		}
 
-		// A menu's or a screen's keys: the arrows choose, Return and Space use what was chosen.
+		static bool isArrow(unsigned k) { return k == key::Up || k == key::Down || k == key::Left || k == key::Right; }
+
+		// The keyboard is choosing in a menu or a screen: Tab started it, or there is no map behind
+		// to pan (the main menu). Moving the mouse, or the screen going, ends it.
+		bool uiKeysChoose() const { return uiTakesKeys && (!uiMapBehind || ui.keyChoice()); }
+
+		// A menu's or a screen's keys: Tab starts choosing, then the arrows choose and Return and
+		// Space use what was chosen. Before that the arrows pan the map, as the original's do.
 		bool uiKey(unsigned k, bool shift)
 		{
+			if (k == key::Tab)
+			{
+				const NavDirection d = shift ? NavDirection::Up : NavDirection::Down;
+				if (!ui.moveChoice(d, false))
+					ui.moveChoice(d, true);
+				return true;
+			}
+			if (isArrow(k) && !uiKeysChoose())
+				return false;
 			if (k == key::Return || k == key::Space)
 			{
 				if (!ui.keyChoice())
@@ -376,7 +393,11 @@ namespace oc4::render
 			{
 				if (k == key::Back)
 					popup.character(L'\b');
-				popup.key(k);
+				// (until Tab starts the keyboard's choice the arrows pan the map under it, as the
+				// original's do: handleHeldKeys)
+				if (isArrow(k) && !popup.keyboardChoice())
+					return;
+				popup.key(k == key::Tab && shift ? key::Up : k);
 				return;
 			}
 			// (the game has no Ctrl+Shift+F, and this works over its screens and popups too)
@@ -385,7 +406,7 @@ namespace oc4::render
 				showFrameRate = !showFrameRate;
 				return;
 			}
-			if (wasdToggle(k, shift, ctrl, alt))
+			if (wasdToggle(k, shift, ctrl, alt, wasdPan))
 			{
 				wasdPan = !wasdPan;
 				wasdToggled = wasdPan;
@@ -587,8 +608,8 @@ namespace oc4::render
 			const float speed = camera.distance * 0.9f * dt;
 			const Vec3 forward{ -std::cos(camera.yaw), -std::sin(camera.yaw), 0 }, right{ -std::sin(camera.yaw), std::cos(camera.yaw), 0 };
 			Vec3 move{};
-			// (with a menu up the arrows are its, not the map's)
-			const bool arrows = !popup.active() && !uiTakesKeys;
+			// (once the keyboard chooses in a menu or a popup, the arrows are its, not the map's)
+			const bool arrows = !(popup.active() && popup.keyboardChoice()) && !uiKeysChoose();
 			if (arrows && held(key::Up))
 				move += forward;
 			if (arrows && held(key::Down))
@@ -840,7 +861,7 @@ namespace oc4::render
 		// Ctrl+Shift+W's answer, at the top in the middle for a moment.
 		void drawWasdNote()
 		{
-			const std::wstring text = wasdPan ? L"W A S D pan the map (Ctrl+Shift+W: off)" : L"W A S D are the game's hotkeys again (Ctrl+Shift+W: pan)";
+			const std::wstring text = wasdPan ? L"W A S D pan the map (Ctrl+Shift+W: off)" : L"W A S D are the game's hotkeys again (the options' Game tab: pan)";
 			const float size = 13, width = overlay->width(text, size, true), x = (overlay->screenWidth() - width) / 2 - 7, y = 76;
 			overlay->rect(x, y, x + width + 14, y + 23, { 0.03f, 0.04f, 0.06f }, 0.75f, 4);
 			overlay->text(text, x + 7, y + 4, size, { 1, 1, 1 }, 1, true);
@@ -1671,7 +1692,14 @@ namespace oc4::render
 		m->updateUiScale();
 	}
 	void MapWindow::setFrameRateShown(bool shown) { m->showFrameRate = shown; }
-	void MapWindow::setUiTakesKeys(bool takes) { m->uiTakesKeys = takes; }
+	void MapWindow::setUiTakesKeys(bool takes, bool mapBehind)
+	{
+		m->uiTakesKeys = takes;
+		m->uiMapBehind = mapBehind;
+		if (!takes)
+			m->ui.clearKeyChoice(); // (the next screen starts with the arrows the map's again)
+	}
+	void MapWindow::clearKeyChoice() { m->ui.clearKeyChoice(); }
 	void MapWindow::setWasdPan(bool on) { m->wasdPan = on; }
 	bool MapWindow::wasdPan() const { return m->wasdPan; }
 	std::optional<bool> MapWindow::takeWasdPanToggle() { return std::exchange(m->wasdToggled, std::nullopt); }

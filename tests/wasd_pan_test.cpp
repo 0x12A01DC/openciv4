@@ -49,11 +49,12 @@ int main()
 	// A menu, screen or popup over the map has its letters.
 	check(!wasdPans('W', { .on = true, .menuUp = true }), "under a menu the letters are its");
 
-	check(wasdToggle('W', true, true, false), "Ctrl+Shift+W toggles");
-	check(!wasdToggle('W', false, true, false), "Ctrl+W is the world builder");
-	check(!wasdToggle('W', true, false, false), "Shift+W builds");
-	check(!wasdToggle('W', true, true, true), "not with Alt too");
-	check(!wasdToggle('F', true, true, false), "Ctrl+Shift+F is the frame rate");
+	check(wasdToggle('W', true, true, false, true), "on: Ctrl+Shift+W turns it off");
+	check(!wasdToggle('W', true, true, false, false), "off: Ctrl+Shift+W is the game's (show a wonder)");
+	check(!wasdToggle('W', false, true, false, true), "Ctrl+W is the world builder");
+	check(!wasdToggle('W', true, false, false, true), "Shift+W builds");
+	check(!wasdToggle('W', true, true, true, true), "not with Alt too");
+	check(!wasdToggle('F', true, true, false, true), "Ctrl+Shift+F is the frame rate");
 
 	if (failures == 0)
 		std::printf("wasd_pan_test: all passed\n");

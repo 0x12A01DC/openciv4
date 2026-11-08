@@ -24,6 +24,20 @@ _VOLUME_STOPS = 20
 _VOLUMES = ('Master', 'Music', 'SoundEffects', 'Speech', 'Ambience', 'Interface')
 _UI_SCALES = (0, 100, 125, 150, 200) # the resolution's choices: the interface's scale, 0 the window's own
 
+
+def _scales():
+	"""The scales the resolution offers at this window's size: one per size (a small window
+	cannot scale up as far, so several come out the same), the player's own kept among them."""
+	out, seen = [0], {}
+	for scale in _UI_SCALES[1:]:
+		size = tuple(oc4host.ui_size_at(scale))
+		if size not in seen:
+			seen[size] = scale
+			out.append(scale)
+		elif scale == _profile['uiScale']:
+			out[out.index(seen[size])] = seen[size] = scale
+	return out
+
 _profile = {
 	'name': 'openciv4',
 	'volume': dict((v, _VOLUME_STOPS) for v in _VOLUMES),
@@ -115,7 +129,7 @@ def _applyGraphics():
 
 
 # W A S D panning (openciv4's own option, no game's): its check box on the options' Game tab,
-# above the language; Ctrl+Shift+W in the window changes it too (the host calls setWasdPan).
+# above the language; while it is on, Ctrl+Shift+W in the window turns it off (the host calls setWasdPan).
 WASD_PAN_CHECKBOX = 'Oc4WasdPanCheckBox'
 
 
@@ -217,16 +231,19 @@ class _UserProfile(object):
 	# takes effect at once)
 	def getResolution(self):
 		scale = _profile['uiScale']
-		return _UI_SCALES.index(scale) if scale in _UI_SCALES else 0
+		scales = _scales()
+		return scales.index(scale) if scale in scales else 0
 	def setResolution(self, i):
-		scale = _UI_SCALES[int(i)] if 0 <= int(i) < len(_UI_SCALES) else 0
+		scales = _scales()
+		scale = scales[int(i)] if 0 <= int(i) < len(scales) else 0
 		if scale != _profile['uiScale']:
 			_profile['uiScale'] = scale
 			_save()
 			oc4host.set_ui_scale(scale)
-	def getResolutionMaxModes(self): return len(_UI_SCALES)
+	def getResolutionMaxModes(self): return len(_scales())
 	def getResolutionString(self, i):
-		scale = _UI_SCALES[int(i)] if 0 <= int(i) < len(_UI_SCALES) else 0
+		scales = _scales()
+		scale = scales[int(i)] if 0 <= int(i) < len(scales) else 0
 		w, h = oc4host.ui_size_at(scale)
 		return '%dx%d (%s)' % (w, h, '%d%%' % scale if scale else 'Auto')
 
@@ -376,7 +393,7 @@ class CyGTabCtrl(object):
 	def attachHBox(self, parent, name):
 		# (openciv4's own option, on the Game tab above the language)
 		if str(parent) == 'GamePanelCenter' and str(name) == 'LangHBox':
-			self.attachCheckBox(parent, WASD_PAN_CHECKBOX, u'Pan the map with W A S D (Ctrl+Shift+W)', 'oc4options', 'handleWasdPanClicked',
+			self.attachCheckBox(parent, WASD_PAN_CHECKBOX, u'Pan the map with W A S D (Ctrl+Shift+W turns it off)', 'oc4options', 'handleWasdPanClicked',
 				WASD_PAN_CHECKBOX, _wasdPanOn())
 			self.setToolTip(WASD_PAN_CHECKBOX, u'Holding W, A, S or D on its own moves the map, as the arrows do. Their own hotkeys '
 				u'(S Sentry, A Automate, W next unit, D destroy) then need the unit\'s buttons; with Shift, Ctrl or Alt they are the '

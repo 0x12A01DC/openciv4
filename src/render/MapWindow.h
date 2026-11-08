@@ -49,12 +49,15 @@ namespace oc4::render
 		// click positions are in.
 		uint32_t width() const;
 		uint32_t height() const;
-		// A menu or a screen is up over the map: the arrows choose on it instead of moving the
-		// map, Return and Space use what they chose.
-		void setUiTakesKeys(bool takes);
+		// A menu or a screen is up over the map: Tab starts choosing on it with the keys, then the
+		// arrows choose instead of moving the map and Return and Space use what they chose. With
+		// no map behind it (the main menu) the arrows choose at once.
+		void setUiTakesKeys(bool takes, bool mapBehind = true);
+		// The keyboard's choice ends (a talk's answers changed: Return is the talk's again).
+		void clearKeyChoice();
 		void pressKey(unsigned key); // (as if typed)
 		// W A S D pan the map as the arrows do (the letters alone, no menu up; WasdPan.h).
-		// Ctrl+Shift+W changes it: takeWasdPanToggle has what it was changed to since last asked.
+		// Ctrl+Shift+W turns it off (only while on: BtS has the key too): takeWasdPanToggle has what it was changed to since last asked.
 		void setWasdPan(bool on);
 		bool wasdPan() const;
 		std::optional<bool> takeWasdPanToggle();

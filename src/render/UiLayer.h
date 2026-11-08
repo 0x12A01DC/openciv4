@@ -44,6 +44,7 @@ namespace oc4::render
 		// way (round the far side with `wrap`); false if there is nothing. Moving the mouse ends it.
 		bool moveChoice(NavDirection direction, bool wrap);
 		bool keyChoice() const { return m_keyHover && m_hover >= 0; }
+		void clearKeyChoice() { m_keyHover = false; }
 		// What it chose, about to be used: an open pull down's item hands the choice back to its box.
 		int useKeyChoice();
 		// The middle of what the keyboard has chosen.

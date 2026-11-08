@@ -1,6 +1,6 @@
 #pragma once
 
-// Panning the map with W A S D, an option (Ctrl+Shift+W, the options' Game tab, --wasd-pan):
+// Panning the map with W A S D, an option (the options' Game tab, --wasd-pan; Ctrl+Shift+W turns it off):
 // which presses are the map's then and which still the game's. Only the letters alone pan; with
 // Shift, Ctrl, Alt or Cmd they stay the game's hotkeys (Ctrl+S saves, Shift+D is diplomacy, Alt+S
 // a sign), and with a menu, a screen or a popup up they are its letters (the arrows choose there,
@@ -39,6 +39,7 @@ namespace oc4::render
 		return s.on && !s.menuUp && !s.shift && !s.ctrl && !s.alt && !s.cmd && wasdDirection(k).has_value();
 	}
 
-	// The option's own key, Ctrl+Shift+W (the game has Ctrl+W and Shift+W, not both).
-	inline bool wasdToggle(unsigned k, bool shift, bool ctrl, bool alt) { return k == 'W' && shift && ctrl && !alt; }
+	// Ctrl+Shift+W turns the option off again. Only while it is on: BtS has Ctrl+Shift+W too
+	// (show a wonder, with cheats on), so with the option off it stays the game's.
+	inline bool wasdToggle(unsigned k, bool shift, bool ctrl, bool alt, bool on) { return on && k == 'W' && shift && ctrl && !alt; }
 }
