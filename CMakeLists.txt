@@ -323,6 +323,12 @@ target_link_libraries(hash_map_test PRIVATE oc4_options)
 add_test(NAME hash_map COMMAND hash_map_test)
 set_target_properties(hash_map_test PROPERTIES FOLDER "tests")
 
+add_executable(globe_bend_test tests/globe_bend_test.cpp)
+target_include_directories(globe_bend_test PRIVATE src)
+target_link_libraries(globe_bend_test PRIVATE oc4_options)
+add_test(NAME globe_bend COMMAND globe_bend_test)
+set_target_properties(globe_bend_test PROPERTIES FOLDER "tests")
+
 if(WIN32 AND TARGET freetype)
 	add_executable(text_layout_freetype_test tests/text_layout_test.cpp src/render/TextLayout.cpp src/render/FontFreeType.cpp)
 	target_include_directories(text_layout_freetype_test PRIVATE src)
