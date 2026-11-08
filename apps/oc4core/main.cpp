@@ -21,7 +21,7 @@
 // opens it, Esc closes it), or with --own-interface the window's simple one.
 // --keys are typed in on your turns then (letters and Space as keys, '^', '@' and '+' before
 // one hold Ctrl, Alt and Shift, '>' ends the turn, '~' is Esc, "(x,y)" right clicks that plot,
-// "[x,y]" left clicks it, "<x,y>" clicks that pixel of the window (a figure there: its unit), "#n" picks the n-th button of the popup up (OK if it has none), a
+// "[x,y]" left clicks it, "%u", "%d", "%l", "%r" and "%e" type an arrow or Return into the window, "<x,y>" clicks that pixel of the window (a figure there: its unit), "#n" picks the n-th button of the popup up (OK if it has none), a
 // popup nothing answers gets its first, 'text' goes into its next edit box, "{Name}" or
 // "{Name/part}" clicks the interface's widget so named, "^{Name}" with Ctrl held, "?{Name}" rests
 // the mouse on it); with
@@ -340,6 +340,19 @@ namespace
 	}
 
 	// The game's code (FInputDevice::KB_..., as its hotkeys have it) of a Windows key; -1 none.
+	unsigned scriptedKey(char c)
+	{
+		switch (c)
+		{
+		case 'u': return render::key::Up;
+		case 'd': return render::key::Down;
+		case 'l': return render::key::Left;
+		case 'r': return render::key::Right;
+		case 'e': return render::key::Return;
+		default: return 0;
+		}
+	}
+
 	int gameKey(unsigned vk)
 	{
 		if (vk >= 'A' && vk <= 'Z')
@@ -945,15 +958,22 @@ namespace
 			}
 			auto clicks = window.takeClicks();
 			// (a scripted game answers what it does not expect with the popup's first button)
-			if (!script.empty() && script.front() != '#' && script.front() != '\'' && ui.shownPopup() && Clock::now() - typed > std::chrono::milliseconds(1500))
+			if (!script.empty() && script.front() != '#' && script.front() != '\'' && script.front() != '%' && ui.shownPopup() && Clock::now() - typed > std::chrono::milliseconds(1500))
 				script.insert(0, "#0");
 			if (const auto now = Clock::now(); player.isTurnActive() && !script.empty() && now - typed > std::chrono::milliseconds(400) &&
-				(script.front() == '#' || script.front() == '\'' || !ui.shownPopup())) // (the rest waits for the popup's answer)
+				(script.front() == '#' || script.front() == '\'' || script.front() == '%' || !ui.shownPopup())) // (the rest waits for the popup's answer)
 			{
 				typed = now;
 				render::MapWindow::PlotClick click;
 				int button = -1;
-				if (script.front() == '\'')
+				if (script.front() == '%' && script.size() > 1)
+				{
+					// "%u", "%d", "%l", "%r", "%e": an arrow or Return typed into the window, as a player's.
+					if (const unsigned k = scriptedKey(script[1]))
+						window.pressKey(k);
+					script.erase(0, 2);
+				}
+				else if (script.front() == '\'')
 				{
 					// 'text': what the popup's next edit box gets when it is answered.
 					const size_t end = script.find('\'', 1);
@@ -1548,6 +1568,14 @@ namespace
 				if (k.key == render::key::Escape)
 					screens.escape();
 			window.takeClicks(); // (no map under it)
+			// (a scripted menu: "%d" and the like are keys, as in a game)
+			if (keys.starts_with('%') && keys.size() > 1 && now - typed > std::chrono::milliseconds(400))
+			{
+				if (const unsigned k = scriptedKey(keys[1]))
+					window.pressKey(k);
+				keys.erase(0, 2);
+				typed = now;
+			}
 			// (a scripted menu: "{Name}" clicks that widget)
 			if (keys.starts_with('{') && now - typed > std::chrono::milliseconds(400))
 				if (const size_t end = keys.find('}'); end != std::string::npos)

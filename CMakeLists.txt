@@ -335,6 +335,12 @@ target_link_libraries(frame_stats_test PRIVATE oc4_options)
 add_test(NAME frame_stats COMMAND frame_stats_test)
 set_target_properties(frame_stats_test PROPERTIES FOLDER "tests")
 
+add_executable(key_nav_test tests/key_nav_test.cpp)
+target_include_directories(key_nav_test PRIVATE src)
+target_link_libraries(key_nav_test PRIVATE oc4_options)
+add_test(NAME key_nav COMMAND key_nav_test)
+set_target_properties(key_nav_test PROPERTIES FOLDER "tests")
+
 add_executable(globe_bend_test tests/globe_bend_test.cpp)
 target_include_directories(globe_bend_test PRIVATE src)
 target_link_libraries(globe_bend_test PRIVATE oc4_options)

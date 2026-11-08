@@ -1,5 +1,6 @@
 #include "render/PopupPanel.h"
 #include "render/Input.h"
+#include "render/KeyNav.h"
 
 #include <windows.h>
 
@@ -27,6 +28,8 @@ namespace oc4::render
 		constexpr float kWidth = 396, kPadX = 21, kPadTop = 18, kPadBottom = 20, kIcon = 28, kOk = 24;
 		constexpr Color kPanel{ 0.05f, 0.06f, 0.09f }, kEdge{ 0.78f, 0.64f, 0.36f }, kText{ 0.97f, 0.97f, 0.97f }, kHot{ 1, 0.83f, 0.49f };
 		constexpr Color kButton{ 0.13f, 0.16f, 0.22f }, kButtonHover{ 0.24f, 0.31f, 0.44f }, kEditFill{ 0.09f, 0.11f, 0.2f }, kEditRim{ 0.62f, 0.72f, 0.9f };
+
+		constexpr Color kKeyChoice{ 1, 0.9f, 0.6f };
 
 		bool chooses(Kind k) { return k == Kind::Button || k == Kind::Radio || k == Kind::Check || k == Kind::Edit; }
 
@@ -72,6 +75,8 @@ namespace oc4::render
 		m_hover = -1;
 		m_helpItem = -2;
 		m_hoverOk = false;
+		m_keyboard = false;
+		m_scrollTo = -1;
 	}
 
 	void PopupPanel::hover(int x, int y)
@@ -80,6 +85,7 @@ namespace oc4::render
 		m_mouseY = y;
 		m_hover = -1;
 		m_hoverOk = false;
+		m_keyboard = false;
 		if (!m_view)
 			return;
 		const float fx = float(x), fy = float(y);
@@ -101,20 +107,47 @@ namespace oc4::render
 		if (m_hoverOk)
 			answer(-1);
 		else if (m_hover >= 0)
-		{
-			const auto& item = m_view->items[size_t(m_hover)];
-			if (item.kind == Kind::Button)
-				answer(m_hover);
-			else if (item.kind == Kind::Check)
-				m_checked[size_t(m_hover)] = !m_checked[size_t(m_hover)];
-			else if (item.kind == Kind::Edit)
-				m_focus = m_hover;
-			else if (item.kind == Kind::Radio)
-				for (size_t i = 0; i < m_view->items.size(); ++i)
-					if (m_view->items[i].kind == Kind::Radio && m_view->items[i].group == item.group)
-						m_checked[i] = int(i) == m_hover;
-		}
+			choose(m_hover);
 		return true;
+	}
+
+	void PopupPanel::choose(int index)
+	{
+		const auto& item = m_view->items[size_t(index)];
+		if (item.kind == Kind::Button)
+			answer(index);
+		else if (item.kind == Kind::Check)
+			m_checked[size_t(index)] = !m_checked[size_t(index)];
+		else if (item.kind == Kind::Edit)
+			m_focus = index;
+		else if (item.kind == Kind::Radio)
+			for (size_t i = 0; i < m_view->items.size(); ++i)
+				if (m_view->items[i].kind == Kind::Radio && m_view->items[i].group == item.group)
+					m_checked[i] = int(i) == index;
+	}
+
+	void PopupPanel::moveChoice(int delta)
+	{
+		// The stops: what can be chosen, then the OK button.
+		constexpr int kOkStop = -2;
+		std::vector<int> stops;
+		for (size_t i = 0; i < m_view->items.size(); ++i)
+			if (chooses(m_view->items[i].kind))
+				stops.push_back(int(i));
+		if (m_view->okButton)
+			stops.push_back(kOkStop);
+		const int current = m_keyboard ? (m_hoverOk ? kOkStop : m_hover) : -1;
+		const auto at = std::ranges::find(stops, current);
+		const int next = navStep(int(stops.size()), m_keyboard && at != stops.end() ? int(at - stops.begin()) : -1, delta);
+		if (next < 0)
+			return;
+		const int stop = stops[size_t(next)];
+		m_keyboard = true;
+		m_hoverOk = stop == kOkStop;
+		m_hover = m_hoverOk ? -1 : stop;
+		m_scrollTo = m_hover;
+		if (m_hover >= 0 && m_view->items[size_t(m_hover)].kind == Kind::Edit)
+			m_focus = m_hover;
 	}
 
 	bool PopupPanel::wheel(int x, int y, int delta)
@@ -130,13 +163,27 @@ namespace oc4::render
 	{
 		if (!m_view)
 			return false;
-		if (virtualKey == key::Escape && !m_answered)
+		if (m_answered)
+			return true;
+		const bool chosenWithKeys = m_keyboard && m_hover >= 0 && m_view->items[size_t(m_hover)].kind != Kind::Edit;
+		if (virtualKey == key::Escape)
 		{
 			m_answer = MapWindow::PopupAnswer{ .dismissed = true };
 			m_answered = true;
 		}
-		else if (virtualKey == key::Return && m_view->okButton && !m_answered)
-			answer(-1);
+		else if (virtualKey == key::Up || virtualKey == key::Left)
+			moveChoice(-1);
+		else if (virtualKey == key::Down || virtualKey == key::Right)
+			moveChoice(1);
+		else if (virtualKey == key::Return)
+		{
+			if (chosenWithKeys)
+				choose(m_hover);
+			else if (m_view->okButton)
+				answer(-1);
+		}
+		else if (virtualKey == key::Space && chosenWithKeys && m_focus < 0) // (a space is text in an edit box)
+			choose(m_hover);
 		return true;
 	}
 
@@ -240,6 +287,17 @@ namespace oc4::render
 		}
 		m_list = { x0 + kPadX - 4, y, x0 + w - kPadX + 4, y + listHeight };
 		m_scrollMax = std::max(0.0f, content - listHeight);
+		if (m_scrollTo >= 0 && size_t(m_scrollTo) < items.size())
+		{
+			float top = 0;
+			for (int i = 0; i < m_scrollTo; ++i)
+				top += heights[size_t(i)];
+			if (top < m_scroll)
+				m_scroll = top;
+			else if (top + heights[size_t(m_scrollTo)] > m_scroll + listHeight)
+				m_scroll = top + heights[size_t(m_scrollTo)] - listHeight;
+		}
+		m_scrollTo = -1;
 		m_scroll = std::clamp(m_scroll, 0.0f, m_scrollMax);
 		o.clip(m_list.x0, m_list.y0, m_list.x1, m_list.y1);
 		m_items.assign(items.size(), Rect{});
@@ -311,6 +369,11 @@ namespace oc4::render
 				}
 				break;
 			}
+		}
+		if (m_keyboard && m_hover >= 0 && size_t(m_hover) < m_items.size())
+		{
+			const Rect& r = m_items[size_t(m_hover)];
+			o.frame(r.x0 - 2, r.y0 + 1, r.x1 + 2, r.y1 - 1, kKeyChoice, 1, 3, 2);
 		}
 		o.unclip();
 		if (m_scrollMax > 0)

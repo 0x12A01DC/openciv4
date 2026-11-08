@@ -144,8 +144,13 @@ The interface has a scale of its own: the Screen Resolution choice on the option
 (Auto follows the window's pixel density), or `--ui-scale PERCENT` for one run. The map keeps
 all the window's pixels.
 
+With a menu, a popup or a screen up, the arrow keys move between its controls instead of the
+map, and Return or Space uses the one chosen (a ring marks it; moving the mouse ends it).
+
 Ctrl+Shift+F shows the frame rate and the longest frame of the last half second (`--show-fps`
 from the start).
+
+The globe view's colour layers (Culture, Trade, Religion) are drawn on the globe itself.
 
 Tools for the game's files, in `build\Release\bin`:
 

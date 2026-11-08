@@ -123,6 +123,7 @@ namespace oc4::render
 		int mouseX = -1, mouseY = -1; // (in the interface's units, as the screens are)
 		int uiPercent = 0; // (0: the window's density)
 		bool showFrameRate = false; // (Ctrl+Shift+F)
+		bool uiTakesKeys = false;   // a menu or a screen over the map has the arrows
 		FrameStats frameStats;
 		std::chrono::steady_clock::time_point lastFrame{};
 		bool panning = false, orbiting = false, minimapDrag = false;
@@ -329,6 +330,38 @@ namespace oc4::render
 			return { -1, -1 };
 		}
 
+		// A menu's or a screen's keys: the arrows choose, Return and Space use what was chosen.
+		bool uiKey(unsigned k, bool shift)
+		{
+			if (k == key::Return || k == key::Space)
+			{
+				if (!ui.keyChoice())
+					return false;
+				uiClicks.push_back({ ui.useKeyChoice(), false, shift, false, false });
+				return true;
+			}
+			const auto direction = [&]() -> std::optional<NavDirection> {
+				switch (k)
+				{
+				case key::Up: return NavDirection::Up;
+				case key::Down: return NavDirection::Down;
+				case key::Left: return NavDirection::Left;
+				case key::Right: return NavDirection::Right;
+				default: return std::nullopt;
+				}
+			}();
+			if (!direction)
+				return false;
+			if (ui.moveChoice(*direction, false))
+				return true;
+			// Nothing further that way: a list may have more to scroll to; else round to the far side.
+			const bool vertical = *direction == NavDirection::Up || *direction == NavDirection::Down;
+			const auto [x, y] = ui.keyChoicePlace();
+			if (!(vertical && x >= 0 && !busy && uiWheel && uiWheel(x, y, *direction == NavDirection::Up ? 120 : -120)))
+				ui.moveChoice(*direction, true);
+			return true;
+		}
+
 		void onKey(unsigned k)
 		{
 			auto& o = view->options;
@@ -347,6 +380,8 @@ namespace oc4::render
 				showFrameRate = !showFrameRate;
 				return;
 			}
+			if (uiTakesKeys && !ctrl && !alt && uiKey(k, shift))
+				return;
 			// Playing, the game takes the keys (its hotkeys, Esc too: Ctrl+S saves, Ctrl+B bares the
 			// map, Home goes to the next city); the view's own toggles are on Ctrl with the letters
 			// the game has none for, and Ctrl+Shift+S saves a screenshot.
@@ -531,13 +566,15 @@ namespace oc4::render
 			const float speed = camera.distance * 0.9f * dt;
 			const Vec3 forward{ -std::cos(camera.yaw), -std::sin(camera.yaw), 0 }, right{ -std::sin(camera.yaw), std::cos(camera.yaw), 0 };
 			Vec3 move{};
-			if (held(key::Up))
+			// (with a menu up the arrows are its, not the map's)
+			const bool arrows = !popup.active() && !uiTakesKeys;
+			if (arrows && held(key::Up))
 				move += forward;
-			if (held(key::Down))
+			if (arrows && held(key::Down))
 				move += forward * -1;
-			if (held(key::Right))
+			if (arrows && held(key::Right))
 				move += right;
-			if (held(key::Left))
+			if (arrows && held(key::Left))
 				move += right * -1;
 			// The mouse at the window's edge scrolls the map that way, as the original's does.
 			if (float fx = 0, fy = 0; edgeScroll && !popup.active() && SDL_GetMouseFocus() == window)
@@ -1590,6 +1627,8 @@ namespace oc4::render
 		m->updateUiScale();
 	}
 	void MapWindow::setFrameRateShown(bool shown) { m->showFrameRate = shown; }
+	void MapWindow::setUiTakesKeys(bool takes) { m->uiTakesKeys = takes; }
+	void MapWindow::pressKey(unsigned key) { m->onKey(key); }
 	MapWindow::UiDisplay MapWindow::uiDisplay() const { return { m->renderer->width(), m->renderer->height(), m->windowDensity() }; }
 	bool MapWindow::uiActive() const { return m->ui.active(); }
 	std::vector<MapWindow::UiClick> MapWindow::takeUiClicks() { return std::exchange(m->uiClicks, {}); }

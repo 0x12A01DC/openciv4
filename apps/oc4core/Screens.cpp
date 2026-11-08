@@ -803,11 +803,29 @@ if _walls:
 		m_version = -1;
 	}
 
+	bool Screens::menuUp()
+	{
+		if (!m_active)
+			return false;
+		if (m_menu || m_utility.diplomacy().active())
+			return true;
+		try
+		{
+			return py::module_::import("oc4screens").attr("modalUp")().cast<bool>();
+		}
+		catch (py::error_already_set& e)
+		{
+			printPythonError(e);
+			return false;
+		}
+	}
+
 	void Screens::frame(render::MapWindow& window, int width, int height)
 	{
 		// (a new scale: the next frame's size, which lays the screens out again)
 		window.setUiScale(m_utility.uiScale());
 		g_display = window.uiDisplay();
+		window.setUiTakesKeys(menuUp());
 		if (!m_active)
 			return;
 		if (m_menu)
@@ -1130,6 +1148,7 @@ if _walls:
 			const bool buttonLike = item.kind == Kind::ImageButton || item.kind == Kind::Button || item.kind == Kind::CheckBox ||
 				item.kind == Kind::Dropdown || item.kind == Kind::EndTurnButton || item.kind == Kind::Cell || item.kind == Kind::Scrollbar;
 			// (a text, setText, is clicked as a button is: the scripts' "EXIT"s are texts)
+			item.mainInterface = !m_menu && info.screen == m_mainId;
 			item.interactive = hitTest != HITTEST_NOHIT && (buttonLike || item.kind == Kind::Text || item.kind == Kind::Movie || (info.widget >= 0 && info.widget != WIDGET_GENERAL) ||
 				(item.kind == Kind::Header && info.part <= -100)); // (a sorting table's header)
 			item.blocks = (info.screen != m_mainId && (item.kind == Kind::Panel || item.kind == Kind::Image || item.kind == Kind::Graphic || item.kind == Kind::Leaderhead ||

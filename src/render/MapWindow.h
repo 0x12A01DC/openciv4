@@ -49,6 +49,10 @@ namespace oc4::render
 		// click positions are in.
 		uint32_t width() const;
 		uint32_t height() const;
+		// A menu or a screen is up over the map: the arrows choose on it instead of moving the
+		// map, Return and Space use what they chose.
+		void setUiTakesKeys(bool takes);
+		void pressKey(unsigned key); // (as if typed)
 		// The frame rate in the corner (Ctrl+Shift+F changes it).
 		void setFrameRateShown(bool shown);
 		// The interface's scale in percent, 0 for the window's density.
@@ -187,6 +191,7 @@ namespace oc4::render
 			int flags = 1;      // 1 left, 2 right, 4 centred (x0 is the anchor)
 			bool state = false, enabled = true;
 			bool interactive = false; // takes clicks and has help
+			bool mainInterface = false; // the main interface's: under a menu the keys do not reach it
 			bool blocks = false;      // a screen's own panel or picture over the main interface: what is under it takes no clicks
 			bool hasColor = false;
 			Color color{};
