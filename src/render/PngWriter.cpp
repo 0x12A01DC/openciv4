@@ -1,5 +1,29 @@
 #include "PngWriter.h"
 
+#ifndef _WIN32
+
+#include <SDL3/SDL_error.h>
+#include <SDL3/SDL_surface.h>
+
+#include <format>
+#include <stdexcept>
+
+namespace oc4::render
+{
+	void writePng(const std::filesystem::path& path, const std::vector<uint8_t>& bgra, uint32_t width, uint32_t height)
+	{
+		SDL_Surface* surface = SDL_CreateSurfaceFrom(int(width), int(height), SDL_PIXELFORMAT_BGRA32, const_cast<uint8_t*>(bgra.data()), int(width * 4));
+		if (!surface)
+			throw std::runtime_error(std::format("SDL_CreateSurfaceFrom: {}", SDL_GetError()));
+		const bool saved = SDL_SavePNG(surface, path.string().c_str());
+		SDL_DestroySurface(surface);
+		if (!saved)
+			throw std::runtime_error(std::format("SDL_SavePNG: {}", SDL_GetError()));
+	}
+}
+
+#else
+
 #include <wincodec.h>
 #include <wrl/client.h>
 
@@ -44,3 +68,5 @@ namespace oc4::render
 		check(encoder->Commit(), "encoder Commit");
 	}
 }
+
+#endif

@@ -81,6 +81,10 @@
 #include <windows.h>
 #include <fstream>
 #include <shlobj.h>
+#ifndef _WIN32
+#include <spawn.h>
+extern char** environ;
+#endif
 
 #include <cctype>
 #include <chrono>
@@ -287,12 +291,12 @@ namespace
 			}
 			else if (a == L"--view-size")
 			{
-				if (std::swscanf(next().c_str(), L"%ux%u", &o.viewWidth, &o.viewHeight) != 2)
+				if (std::swscanf(next().wstring().c_str(), L"%ux%u", &o.viewWidth, &o.viewHeight) != 2)
 					throw std::runtime_error("--view-size takes WxH");
 			}
 			else if (a == L"--plot-help")
 			{
-				if (std::swscanf(next().c_str(), L"%d,%d", &o.helpX, &o.helpY) != 2)
+				if (std::swscanf(next().wstring().c_str(), L"%d,%d", &o.helpX, &o.helpY) != 2)
 					throw std::runtime_error("--plot-help takes X,Y");
 			}
 			else if (a == L"--keys")
@@ -301,7 +305,7 @@ namespace
 				o.viewSeconds = std::stod(next().wstring());
 			else if (a == L"--look")
 			{
-				if (std::swscanf(next().c_str(), L"%d,%d,%f", &o.lookX, &o.lookY, &o.lookDistance) < 2)
+				if (std::swscanf(next().wstring().c_str(), L"%d,%d,%f", &o.lookX, &o.lookY, &o.lookDistance) < 2)
 					throw std::runtime_error("--look takes X,Y[,distance]");
 			}
 			else
@@ -1438,6 +1442,7 @@ namespace
 
 	void startAgain(const fs::path& startDir, const fs::path& program, const std::vector<std::wstring>& args)
 	{
+#ifdef _WIN32
 		const std::wstring exe = program.wstring();
 		std::wstring line = L"\"" + exe + L"\"";
 		for (const std::wstring& a : args)
@@ -1450,6 +1455,20 @@ namespace
 			CloseHandle(pi.hThread);
 			CloseHandle(pi.hProcess);
 		}
+#else
+		std::error_code ec;
+		fs::current_path(startDir, ec);
+		std::vector<std::string> strings{ program.string() };
+		for (const std::wstring& a : args)
+			strings.push_back(fs::path(a).string());
+		std::vector<char*> argv;
+		for (std::string& a : strings)
+			argv.push_back(a.data());
+		argv.push_back(nullptr);
+		pid_t child = 0;
+		if (posix_spawn(&child, argv[0], nullptr, nullptr, argv.data(), environ) != 0)
+			std::fprintf(stderr, "cannot start %s\n", argv[0]);
+#endif
 	}
 
 	// The program of another mod (its install's, logs' and window's options kept).
@@ -1718,7 +1737,7 @@ int wmain(int argc, wchar_t** argv)
 		// The original engine's surroundings: it runs in the Beyond the Sword folder, where
 		// mods (BUG's paths, AND2's XML) look for their files, and the game core is in the
 		// Assets folder of its mod.
-		if (!SetCurrentDirectoryW(btsDir.c_str()))
+		if (!SetCurrentDirectoryW(btsDir.wstring().c_str()))
 			throw std::runtime_error("cannot enter " + btsDir.string());
 		const fs::path gameCore = host::loadGameCore(modDir ? std::optional(*modDir / "Assets") : std::nullopt);
 		host::setGameCoreModulePaths(exePath, modDir.value_or(btsDir) / "Assets" / "CvGameCoreDLL.dll");

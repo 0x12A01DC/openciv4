@@ -9,10 +9,12 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # Keep symbols in optimised builds: crash traces from the game core need them.
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo,Release>:ProgramDatabase>")
-add_link_options($<$<CONFIG:Release>:/DEBUG:FULL> $<$<CONFIG:Release>:/OPT:REF> $<$<CONFIG:Release>:/OPT:ICF>)
+if(MSVC)
+	add_link_options($<$<CONFIG:Release>:/DEBUG:FULL> $<$<CONFIG:Release>:/OPT:REF> $<$<CONFIG:Release>:/OPT:ICF>)
+endif()
 
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
-	message(FATAL_ERROR "openciv4 is x64-only")
+	message(FATAL_ERROR "openciv4 is 64-bit only")
 endif()
 
 # Whole-program optimisation: the game core spends much of a turn in small accessors
@@ -32,6 +34,16 @@ add_library(oc4_options INTERFACE)
 if(MSVC)
 	target_compile_options(oc4_options INTERFACE /W4 /permissive- /utf-8 /Zc:__cplusplus /Zc:preprocessor /MP)
 	target_compile_definitions(oc4_options INTERFACE NOMINMAX WIN32_LEAN_AND_MEAN UNICODE _UNICODE)
+endif()
+
+if(NOT WIN32)
+	# The small part of Win32 the engine's tools and the renderer use, and the wmain entry point.
+	add_library(oc4_posix STATIC gamecore/compat/posix/oc4_posix.cpp gamecore/compat/posix/oc4_wmain.cpp)
+	target_include_directories(oc4_posix PUBLIC gamecore/compat/posix)
+	target_compile_features(oc4_posix PUBLIC cxx_std_20)
+	target_link_libraries(oc4_options INTERFACE oc4_posix)
+	set(OC4_DIRECTXMATH_DIR "${PROJECT_SOURCE_DIR}/external/DirectXMath" CACHE PATH "DirectXMath (MIT), part of the Windows SDK on Windows")
+	target_include_directories(oc4_options SYSTEM INTERFACE "${OC4_DIRECTXMATH_DIR}/Inc")
 endif()
 
 # Visual Studio solution layout
@@ -103,7 +115,13 @@ set(OC4_FFMPEG_DLLS avutil-60.dll avcodec-62.dll avformat-62.dll)
 add_library(oc4_media STATIC src/media/Movie.cpp)
 target_include_directories(oc4_media PUBLIC src)
 target_link_libraries(oc4_media PRIVATE oc4_options)
-if(EXISTS "${OC4_FFMPEG_DIR}/include/libavcodec/avcodec.h")
+if(NOT WIN32 AND EXISTS "${OC4_FFMPEG_DIR}/include/libavcodec/avcodec.h")
+	target_include_directories(oc4_media SYSTEM PRIVATE "${OC4_FFMPEG_DIR}/include")
+	target_compile_definitions(oc4_media PRIVATE OC4_HAVE_FFMPEG)
+	target_link_directories(oc4_media PUBLIC "${OC4_FFMPEG_DIR}/lib")
+	target_link_libraries(oc4_media PUBLIC avutil avcodec avformat swscale swresample)
+	set(OC4_FFMPEG_DLLS)
+elseif(EXISTS "${OC4_FFMPEG_DIR}/include/libavcodec/avcodec.h")
 	target_include_directories(oc4_media SYSTEM PRIVATE "${OC4_FFMPEG_DIR}/include")
 	target_compile_definitions(oc4_media PRIVATE OC4_HAVE_FFMPEG)
 	# (the build's import libraries are MinGW's, which MSVC cannot delay-load: made again from the .def files)
@@ -173,7 +191,10 @@ add_library(oc4_render STATIC
 	src/render/TextLayout.cpp
 	src/render/Theme.cpp
 )
-target_link_libraries(oc4_render PUBLIC oc4_anim oc4_gfx oc4_media SDL3::SDL3-static d3dcompiler dwrite windowscodecs ole32 PRIVATE oc4_options)
+target_link_libraries(oc4_render PUBLIC oc4_anim oc4_gfx oc4_media SDL3::SDL3-static oc4_options)
+if(WIN32)
+	target_link_libraries(oc4_render PUBLIC d3dcompiler dwrite windowscodecs ole32)
+endif()
 if(OC4_FREETYPE)
 	target_link_libraries(oc4_render PRIVATE freetype)
 endif()
@@ -255,7 +276,7 @@ add_executable(oc4core
 	apps/oc4core/Unimplemented.cpp
 	apps/oc4core/Utility.cpp
 	apps/oc4core/Xml.cpp
-	apps/oc4core/oc4core.rc
+	$<$<PLATFORM_ID:Windows>:apps/oc4core/oc4core.rc>
 )
 # The scripts in python/ are compiled into the engine as byte arrays.
 foreach(_py IN ITEMS oc4engine:kOc4EnginePy oc4screens:kOc4ScreensPy oc4menu:kOc4MenuPy oc4turnlog:kOc4TurnLogPy oc4options:kOc4OptionsPy oc4wb:kOc4WbPy)
@@ -270,21 +291,30 @@ foreach(_py IN ITEMS oc4engine:kOc4EnginePy oc4screens:kOc4ScreensPy oc4menu:kOc
 	configure_file("${CMAKE_BINARY_DIR}/generated/${_py_name}_py.h.tmp" "${CMAKE_BINARY_DIR}/generated/${_py_name}_py.h" COPYONLY)
 endforeach()
 target_include_directories(oc4core PRIVATE apps/oc4core "${CMAKE_BINARY_DIR}/generated")
-target_link_libraries(oc4core PRIVATE CvGameCoreDLL oc4_core oc4_render oc4_audio oc4_zlib dbghelp bcrypt winmm shell32 ole32 advapi32 ws2_32)
+target_link_libraries(oc4core PRIVATE CvGameCoreDLL oc4_core oc4_render oc4_audio oc4_zlib oc4_options)
+if(WIN32)
+	target_link_libraries(oc4core PRIVATE dbghelp bcrypt winmm shell32 ole32 advapi32 ws2_32)
+endif()
 # Includes the SDK headers, so it shares the game core's dialect (no UNICODE, lenient conformance).
 target_compile_definitions(oc4core PRIVATE OC4_GAMECORE_IMPORT _USRDLL _CRT_SECURE_NO_WARNINGS "OC4_DEFAULT_PYTHON_HOME=\"${OC4_PYTHON27_DIR}\""
 	"OC4_GAME_CORE_DLL=\"${OC4_GAME_CORE_NAME}.dll\"")
-target_link_options(oc4core PRIVATE "/DELAYLOAD:${OC4_GAME_CORE_NAME}.dll")
-target_link_libraries(oc4core PRIVATE delayimp)
+if(WIN32)
+	target_link_options(oc4core PRIVATE "/DELAYLOAD:${OC4_GAME_CORE_NAME}.dll")
+	target_link_libraries(oc4core PRIVATE delayimp)
+endif()
 set_target_properties(oc4core PROPERTIES CXX_STANDARD 20 CXX_SCAN_FOR_MODULES OFF)
+if(NOT MSVC)
+	target_compile_options(oc4core PRIVATE -fms-extensions -ferror-limit=0 -Wno-everything -ffp-contract=off)
+endif()
 if(MSVC)
 	target_compile_options(oc4core PRIVATE /permissive /Zc:forScope- /W3 /EHsc /MP /source-charset:windows-1252 /execution-charset:windows-1252
 		/wd4244 /wd4267 /wd4996 /wd4251 /wd4018 /wd4800)
 endif()
+if(WIN32)
 list(TRANSFORM OC4_FFMPEG_DLLS PREPEND "${OC4_FFMPEG_DIR}/bin/" OUTPUT_VARIABLE OC4_FFMPEG_DLL_FILES)
 add_custom_command(TARGET oc4core POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OC4_PYTHON27_DIR}/python27.dll" ${OC4_FFMPEG_DLL_FILES} "$<TARGET_FILE_DIR:oc4core>")
-
+endif()
 # ---------------------------------------------------------------- tests
 enable_testing()
 add_executable(hash_map_test tests/hash_map_test.cpp)
@@ -301,18 +331,22 @@ if(WIN32 AND TARGET freetype)
 	set_target_properties(text_layout_freetype_test PROPERTIES FOLDER "tests")
 endif()
 
-add_executable(text_layout_test tests/text_layout_test.cpp)
-target_link_libraries(text_layout_test PRIVATE oc4_options oc4_render)
-add_test(NAME text_layout COMMAND text_layout_test)
-set_target_properties(text_layout_test PROPERTIES FOLDER "tests")
+if(WIN32)
+	add_executable(text_layout_test tests/text_layout_test.cpp)
+	target_link_libraries(text_layout_test PRIVATE oc4_options oc4_render)
+	add_test(NAME text_layout COMMAND text_layout_test)
+	set_target_properties(text_layout_test PROPERTIES FOLDER "tests")
+endif()
 
 set_target_properties(nifview oc4core PROPERTIES FOLDER "apps")
 get_property(OC4_CORE_DIRS GLOBAL PROPERTY OC4_GAME_CORE_DIRS)
+if(WIN32)
 foreach(dir IN LISTS OC4_CORE_DIRS)
 	add_custom_command(TARGET oc4core POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E make_directory "${dir}"
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:oc4core>" "$<TARGET_PDB_FILE:oc4core>" "${OC4_PYTHON27_DIR}/python27.dll" ${OC4_FFMPEG_DLL_FILES} "${dir}")
 endforeach()
+endif()
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT oc4core)
 if(OC4_CIV4_DIR)
 	set_target_properties(nifview PROPERTIES VS_DEBUGGER_ENVIRONMENT "OC4_CIV4_DIR=${OC4_CIV4_DIR}"

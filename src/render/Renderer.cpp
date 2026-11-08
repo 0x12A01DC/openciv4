@@ -3,8 +3,10 @@
 #include "gfx/DdsImage.h"
 
 #include <DirectXMath.h>
+#ifdef _WIN32
 #include <d3dcompiler.h>
 #include <wrl/client.h>
+#endif
 
 #include <SDL3/SDL_init.h>
 
@@ -16,12 +18,25 @@
 #include <stdexcept>
 
 using namespace DirectX;
+#ifdef _WIN32
 using Microsoft::WRL::ComPtr;
+#endif
 
 namespace oc4::render
 {
 	namespace
 	{
+#ifdef __APPLE__
+		struct MslShader
+		{
+			const char* file;
+			const char* entry;
+			const char* source;
+		};
+		const MslShader kMslShaders[] = {
+#include "MslShaders.inc"
+		};
+#endif
 		constexpr char kShaderBody[] = R"hlsl(
 
 cbuffer Object : register(b1, UNIFORMS)
@@ -394,7 +409,11 @@ float4 PSOverlay(Out p) : SV_Target
 		// (the GPU devices are the video subsystem's, with a window or without)
 		if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
 			fail("SDL_InitSubSystem");
+#ifdef __APPLE__
+		m_device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_MSL, debug, nullptr);
+#else
 		m_device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_DXBC, debug, nullptr);
+#endif
 		if (!m_device)
 			fail("SDL_CreateGPUDevice");
 		if (m_window && !SDL_ClaimWindowForGPUDevice(m_device, m_window))
@@ -471,6 +490,21 @@ float4 PSOverlay(Out p) : SV_Target
 	SDL_GPUShader* Renderer::compile(std::string_view source, const char* name, const char* entry, SDL_GPUShaderStage stage, uint32_t samplers,
 		uint32_t storageBuffers, uint32_t uniformBuffers) const
 	{
+#ifdef __APPLE__
+		// Metal: the same HLSL, translated ahead of time by tools/shaders/gen_msl.py.
+		(void)source;
+		const MslShader* msl = nullptr;
+		for (const MslShader& candidate : kMslShaders)
+			if (std::strcmp(candidate.file, name) == 0 && std::strcmp(candidate.entry, entry) == 0)
+				msl = &candidate;
+		if (!msl)
+			throw std::runtime_error(std::format("{} {}: no Metal translation (run tools/shaders/gen_msl.py)", name, entry));
+		SDL_GPUShaderCreateInfo ci{};
+		ci.code = reinterpret_cast<const Uint8*>(msl->source);
+		ci.code_size = std::strlen(msl->source);
+		ci.entrypoint = entry;
+		ci.format = SDL_GPU_SHADERFORMAT_MSL;
+#else
 		const bool vertex = stage == SDL_GPU_SHADERSTAGE_VERTEX;
 		const D3D_SHADER_MACRO defines[] = { { "UNIFORMS", vertex ? "space1" : "space3" }, { nullptr, nullptr } };
 		ComPtr<ID3DBlob> blob, errors;
@@ -482,6 +516,7 @@ float4 PSOverlay(Out p) : SV_Target
 		ci.code_size = blob->GetBufferSize();
 		ci.entrypoint = entry;
 		ci.format = SDL_GPU_SHADERFORMAT_DXBC;
+#endif
 		ci.stage = stage;
 		ci.num_samplers = samplers;
 		ci.num_storage_buffers = storageBuffers;

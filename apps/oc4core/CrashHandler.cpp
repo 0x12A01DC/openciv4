@@ -1,4 +1,35 @@
-﻿#include "CrashHandler.h"
+#include "CrashHandler.h"
+
+#ifndef _WIN32
+
+#include <csignal>
+#include <cstdio>
+#include <execinfo.h>
+#include <initializer_list>
+#include <unistd.h>
+
+namespace oc4::host
+{
+	namespace
+	{
+		void onCrash(int signal)
+		{
+			std::fprintf(stderr, "[oc4core] crash: signal %d\n", signal);
+			void* frames[64];
+			backtrace_symbols_fd(frames, backtrace(frames, 64), STDERR_FILENO);
+			std::signal(signal, SIG_DFL);
+			std::raise(signal);
+		}
+	}
+
+	void installCrashHandler()
+	{
+		for (int signal : { SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT })
+			std::signal(signal, onCrash);
+	}
+}
+
+#else
 
 #include <windows.h>
 
@@ -66,3 +97,5 @@ namespace oc4::host
 
 	void installCrashHandler() { SetUnhandledExceptionFilter(onCrash); }
 }
+
+#endif

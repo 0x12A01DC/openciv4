@@ -85,6 +85,7 @@ namespace oc4::host
 		// faults there, so probe under SEH.
 		const CvArtInfoFeature::FeatureArtPiece* pieceFor(const CvArtInfoFeature::FeatureVariety& variety, int mask)
 		{
+#ifdef _WIN32
 			__try
 			{
 				const CvArtInfoFeature::FeatureArtPiece& piece = variety.getFeatureArtPieceFromConnectionMask(mask);
@@ -94,6 +95,12 @@ namespace oc4::host
 			{
 				return nullptr;
 			}
+#else
+			if (variety.getNumFeatureArtPieces() == 0)
+				return nullptr;
+			const CvArtInfoFeature::FeatureArtPiece& piece = variety.getFeatureArtPieceFromConnectionMask(mask);
+			return piece.getConnectionMask() == mask ? &piece : nullptr;
+#endif
 		}
 
 		// "N NE" as DirectionTypes bits; "-" is none.

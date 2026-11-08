@@ -1,9 +1,9 @@
 #pragma once
 
 // The engine's FDataStreamBase over a memory buffer: what the DLL serialises the game
-// through. Little-endian, ints/longs 4 bytes (long is 32-bit on Win64 too), bool 1 byte,
-// strings as an int character count followed by the characters (wide: UTF-16 units),
-// without terminator; exactly the layout of the original 32-bit engine's saves.
+// through. Little-endian, ints/longs 4 bytes (whatever `long` is on this platform), bool 1 byte,
+// strings as an int character count followed by the characters (wide: UTF-16 units, whatever
+// wchar_t is), without terminator; exactly the layout of the original 32-bit engine's saves.
 //
 // Reading past the end yields zeros and sets overrun() instead of throwing through the
 // DLL; the save loader checks it.
@@ -12,7 +12,9 @@
 #include "FDataStreamBase.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace oc4::host
@@ -68,10 +70,10 @@ namespace oc4::host
 		void Read(unsigned int* i) override { get(i, 1); }
 		void Read(int count, int values[]) override { get(values, count); }
 		void Read(int count, unsigned int values[]) override { get(values, count); }
-		void Read(long* l) override { get(l, 1); }
-		void Read(unsigned long* l) override { get(l, 1); }
-		void Read(int count, long values[]) override { get(values, count); }
-		void Read(int count, unsigned long values[]) override { get(values, count); }
+		void Read(long* l) override { getWide32(l, 1); }
+		void Read(unsigned long* l) override { getWide32(l, 1); }
+		void Read(int count, long values[]) override { getWide32(values, count); }
+		void Read(int count, unsigned long values[]) override { getWide32(values, count); }
 		void Read(float* value) override { get(value, 1); }
 		void Read(int count, float values[]) override { get(values, count); }
 		void Read(double* value) override { get(value, 1); }
@@ -91,10 +93,10 @@ namespace oc4::host
 		void Write(unsigned int value) override { put(&value, 1); }
 		void Write(int count, const int values[]) override { put(values, count); }
 		void Write(int count, const unsigned int values[]) override { put(values, count); }
-		void Write(long value) override { put(&value, 1); }
-		void Write(unsigned long value) override { put(&value, 1); }
-		void Write(int count, const long values[]) override { put(values, count); }
-		void Write(int count, const unsigned long values[]) override { put(values, count); }
+		void Write(long value) override { putWide32(&value, 1); }
+		void Write(unsigned long value) override { putWide32(&value, 1); }
+		void Write(int count, const long values[]) override { putWide32(values, count); }
+		void Write(int count, const unsigned long values[]) override { putWide32(values, count); }
 		void Write(float value) override { put(&value, 1); }
 		void Write(int count, const float values[]) override { put(values, count); }
 		void Write(double value) override { put(&value, 1); }
@@ -106,7 +108,9 @@ namespace oc4::host
 		void readBytes(void* p, size_t n);
 
 	private:
-		static_assert(sizeof(long) == 4 && sizeof(wchar) == 2 && sizeof(bool) == 1, "save layout assumes the Windows data model");
+		static_assert(sizeof(bool) == 1 && sizeof(short) == 2 && sizeof(int) == 4 && sizeof(float) == 4 && sizeof(double) == 8, "save layout");
+		static_assert(sizeof(long) == 4 || sizeof(long) == 8);
+		static_assert(sizeof(wchar) == 2 || sizeof(wchar) == 4);
 
 		template <class T>
 		void put(const T* values, int count)
@@ -120,6 +124,29 @@ namespace oc4::host
 			if (count > 0)
 				readBytes(values, sizeof(T) * size_t(count));
 		}
+		// A `long` is 4 bytes in a save, whatever it is here.
+		template <class T>
+		void putWide32(const T* values, int count)
+		{
+			for (int i = 0; i < count; ++i)
+			{
+				const std::conditional_t<std::is_signed_v<T>, int32_t, uint32_t> v = static_cast<decltype(v + 0)>(values[i]);
+				put(&v, 1);
+			}
+		}
+		template <class T>
+		void getWide32(T* values, int count)
+		{
+			for (int i = 0; i < count; ++i)
+			{
+				std::conditional_t<std::is_signed_v<T>, int32_t, uint32_t> v = 0;
+				get(&v, 1);
+				values[i] = v;
+			}
+		}
+		// Wide strings: the count is of UTF-16 units, as on Windows.
+		unsigned int writeUtf16(const wchar* s, size_t length);
+		std::wstring readUtf16();
 		int readLength();
 
 		std::vector<std::byte> m_data;

@@ -1,5 +1,18 @@
 #include "Profiler.h"
 
+#ifndef _WIN32
+
+namespace oc4::host
+{
+	// (the sampling profiler walks x64 unwind tables; nothing samples here yet)
+	void SamplingProfiler::start() {}
+	void SamplingProfiler::stop() {}
+	void SamplingProfiler::report(std::FILE* out, int) const { std::fputs("profiler: not available on this platform\n", out); }
+	void SamplingProfiler::writeFolded(const std::filesystem::path&) const {}
+}
+
+#else
+
 #include <dbghelp.h>
 #include <timeapi.h>
 
@@ -188,3 +201,5 @@ namespace oc4::host
 			file << stack << ' ' << count << '\n';
 	}
 }
+
+#endif

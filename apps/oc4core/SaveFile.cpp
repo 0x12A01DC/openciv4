@@ -4,7 +4,11 @@
 
 #include <windows.h>
 
+#ifdef _WIN32
 #include <bcrypt.h>
+#else
+#include <CommonCrypto/CommonDigest.h>
+#endif
 #include <zlib.h>
 
 #include <cstring>
@@ -123,8 +127,12 @@ namespace oc4::host
 		std::string md5Hex(const std::vector<std::byte>& data)
 		{
 			unsigned char hash[16] = {};
+#ifdef _WIN32
 			BCryptHash(BCRYPT_MD5_ALG_HANDLE, nullptr, 0, reinterpret_cast<PUCHAR>(const_cast<std::byte*>(data.data())), ULONG(data.size()), hash,
 				sizeof hash);
+#else
+			CC_MD5(data.data(), CC_LONG(data.size()), hash);
+#endif
 			static constexpr char hex[] = "0123456789abcdef";
 			std::string s;
 			for (const unsigned char c : hash)
