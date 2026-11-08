@@ -343,6 +343,13 @@ if(WIN32 AND TARGET freetype)
 	set_target_properties(text_layout_freetype_test PROPERTIES FOLDER "tests")
 endif()
 
+if(NOT WIN32)
+	add_executable(posix_compat_test gamecore/tests/posix_compat_test.cpp)
+	target_link_libraries(posix_compat_test PRIVATE oc4_posix)
+	add_test(NAME posix_compat COMMAND posix_compat_test)
+	set_target_properties(posix_compat_test PROPERTIES FOLDER "tests")
+endif()
+
 if(WIN32)
 	add_executable(text_layout_test tests/text_layout_test.cpp)
 	target_link_libraries(text_layout_test PRIVATE oc4_options oc4_render)
