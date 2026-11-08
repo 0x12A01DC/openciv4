@@ -22,6 +22,7 @@ W, H = 800, 600
 
 _VOLUME_STOPS = 20
 _VOLUMES = ('Master', 'Music', 'SoundEffects', 'Speech', 'Ambience', 'Interface')
+_UI_SCALES = (0, 100, 125, 150, 200) # the resolution's choices: the interface's scale, 0 the window's own
 
 _profile = {
 	'name': 'openciv4',
@@ -30,7 +31,7 @@ _profile = {
 	'graphic': {},
 	'player': {},
 	'clock': False, 'hours24': False,
-	'graphicsLevel': 0, 'renderQuality': 0, 'globeView': 0, 'movieQuality': 0, 'mainMenu': 0, 'antiAliasing': 0,
+	'graphicsLevel': 0, 'renderQuality': 0, 'globeView': 0, 'movieQuality': 0, 'mainMenu': 0, 'antiAliasing': 0, 'uiScale': 0,
 	'speakers': '', 'musicPath': '', 'voice': False,
 }
 
@@ -65,7 +66,7 @@ def _load():
 					_profile[parts[0]][int(parts[1])] = value == '1'
 				elif parts[0] in ('clock', 'hours24', 'voice'):
 					_profile[parts[0]] = value == '1'
-				elif parts[0] in ('graphicsLevel', 'renderQuality', 'globeView', 'movieQuality', 'mainMenu', 'antiAliasing'):
+				elif parts[0] in ('graphicsLevel', 'renderQuality', 'globeView', 'movieQuality', 'mainMenu', 'antiAliasing', 'uiScale'):
 					_profile[parts[0]] = int(value)
 				elif parts[0] in ('name', 'speakers', 'musicPath'):
 					_profile[parts[0]] = value
@@ -84,7 +85,7 @@ def _save():
 		lines.append('%s=%s' % (key, _profile[key]))
 	for key in ('clock', 'hours24', 'voice'):
 		lines.append('%s=%d' % (key, 1 if _profile[key] else 0))
-	for key in ('graphicsLevel', 'renderQuality', 'globeView', 'movieQuality', 'mainMenu', 'antiAliasing'):
+	for key in ('graphicsLevel', 'renderQuality', 'globeView', 'movieQuality', 'mainMenu', 'antiAliasing', 'uiScale'):
 		lines.append('%s=%d' % (key, _profile[key]))
 	for v in _VOLUMES:
 		lines.append('volume.%s=%d' % (v, _profile['volume'][v]))
@@ -106,6 +107,7 @@ def _applyGraphics():
 		oc4host.reset_graphic_options()
 		for i, on in _profile['graphic'].items():
 			oc4host.set_graphic_option(int(i), bool(on))
+		oc4host.set_ui_scale(_profile['uiScale'])
 	except Exception:
 		pass
 
@@ -177,10 +179,22 @@ class _UserProfile(object):
 	def getAntiAliasing(self): return _profile['antiAliasing']
 	def setAntiAliasing(self, i): _profile['antiAliasing'] = int(i)
 	def getAntiAliasingMaxMultiSamples(self): return 0
-	def getResolution(self): return 0
-	def setResolution(self, i): pass
-	def getResolutionMaxModes(self): return 1
-	def getResolutionString(self, i): return '%dx%d' % tuple(oc4screens._resolution[:2])
+	# (the map keeps the window's pixels: the resolution's choices are the interface's, which
+	# takes effect at once)
+	def getResolution(self):
+		scale = _profile['uiScale']
+		return _UI_SCALES.index(scale) if scale in _UI_SCALES else 0
+	def setResolution(self, i):
+		scale = _UI_SCALES[int(i)] if 0 <= int(i) < len(_UI_SCALES) else 0
+		if scale != _profile['uiScale']:
+			_profile['uiScale'] = scale
+			_save()
+			oc4host.set_ui_scale(scale)
+	def getResolutionMaxModes(self): return len(_UI_SCALES)
+	def getResolutionString(self, i):
+		scale = _UI_SCALES[int(i)] if 0 <= int(i) < len(_UI_SCALES) else 0
+		w, h = oc4host.ui_size_at(scale)
+		return '%dx%d (%s)' % (w, h, '%d%%' % scale if scale else 'Auto')
 
 	# the player's options (the game's own when one is on: the active player's)
 	def getPlayerOption(self, i):

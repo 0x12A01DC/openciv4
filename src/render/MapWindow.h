@@ -45,9 +45,18 @@ namespace oc4::render
 		void lookAt(int x, int y, float distanceInPlots = 9);
 		// Moves the camera over the plot, keeping its distance.
 		void centerOn(int x, int y);
-		// The size of what it renders, in pixels.
+		// The interface's size: its units (UiScale.h), which the screens, the mouse and the
+		// click positions are in.
 		uint32_t width() const;
 		uint32_t height() const;
+		// The interface's scale in percent, 0 for the window's density.
+		void setUiScale(int percent);
+		struct UiDisplay
+		{
+			uint32_t width = 0, height = 0; // pixels
+			float density = 1;
+		};
+		UiDisplay uiDisplay() const;
 		// Renders a frame (dt seconds after the last) and shows it.
 		void frame(float dt);
 		void saveScreenshot(const std::filesystem::path& png);

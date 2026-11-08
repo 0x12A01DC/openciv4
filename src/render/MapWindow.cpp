@@ -1,5 +1,6 @@
 #include "render/MapWindow.h"
 #include "render/GlobeBend.h"
+#include "render/UiScale.h"
 
 #include "render/Leaderhead.h"
 #include "render/ModelView.h"
@@ -79,6 +80,7 @@ namespace oc4::render
 			renderer = std::make_unique<Renderer>(window, width, height);
 			view = std::make_unique<MapView>(*renderer, assets);
 			overlay = std::make_unique<Overlay>(*renderer);
+			updateUiScale();
 			overlay->setArt(&art);
 			// The game's interface theme: the screens' and the popups' look, the text's face.
 			if (theme.load(assets.layerRoots()))
@@ -117,7 +119,8 @@ namespace oc4::render
 		float tilt = 0; // the user's change of the zoom-dependent pitch
 		bool open = true, running = false, turnRequest = false, framed = false;
 		std::string status, title;
-		int mouseX = -1, mouseY = -1;
+		int mouseX = -1, mouseY = -1; // (in the interface's units, as the screens are)
+		int uiPercent = 0; // (0: the window's density)
 		bool panning = false, orbiting = false, minimapDrag = false;
 		bool playing = false;
 		std::filesystem::path screenshotFolder;
@@ -231,7 +234,7 @@ namespace oc4::render
 		std::optional<Vec3> groundAt(int x, int y, float z = 0) const
 		{
 			const XMMATRIX inv = XMMatrixInverse(nullptr, viewProjection());
-			const float nx = 2.0f * (float(x) + 0.5f) / float(renderer->width()) - 1, ny = 1 - 2.0f * (float(y) + 0.5f) / float(renderer->height());
+			const float nx = 2.0f * (float(x) + 0.5f) / overlay->screenWidth() - 1, ny = 1 - 2.0f * (float(y) + 0.5f) / overlay->screenHeight();
 			const auto unproject = [&](float d) {
 				XMFLOAT4 p;
 				XMStoreFloat4(&p, XMVector4Transform(XMVectorSet(nx, ny, d, 1), inv));
@@ -301,7 +304,7 @@ namespace oc4::render
 			if (view->empty())
 				return std::nullopt;
 			const XMMATRIX inv = XMMatrixInverse(nullptr, viewProjection());
-			const float nx = 2.0f * (float(x) + 0.5f) / float(renderer->width()) - 1, ny = 1 - 2.0f * (float(y) + 0.5f) / float(renderer->height());
+			const float nx = 2.0f * (float(x) + 0.5f) / overlay->screenWidth() - 1, ny = 1 - 2.0f * (float(y) + 0.5f) / overlay->screenHeight();
 			const auto unproject = [&](float d) {
 				XMFLOAT4 p;
 				XMStoreFloat4(&p, XMVector4Transform(XMVectorSet(nx, ny, d, 1), inv));
@@ -658,13 +661,13 @@ namespace oc4::render
 			for (const auto& it : ui.items())
 				if (it.kind == UiItem::Kind::Leaderhead)
 					if (const auto at = heads.find(it.texture); at != heads.end() && at->second.head->loaded() && !at->second.bitmap)
-						at->second.bitmap = at->second.head->render(uint32_t(std::max(1.0f, it.x1 - it.x0)), uint32_t(std::max(1.0f, it.y1 - it.y0)));
+						at->second.bitmap = at->second.head->render(uint32_t(std::max(1.0f, (it.x1 - it.x0) * overlay->scale())), uint32_t(std::max(1.0f, (it.y1 - it.y0) * overlay->scale())));
 			for (auto& [key, m] : models)
 				m.bitmap = nullptr;
 			for (const auto& it : ui.items())
 				if (it.kind == UiItem::Kind::Model)
 					if (const auto at = models.find(modelKey(it)); at != models.end() && at->second.view->loaded() && !at->second.bitmap)
-						at->second.bitmap = at->second.view->render(uint32_t(std::max(1.0f, it.x1 - it.x0)), uint32_t(std::max(1.0f, it.y1 - it.y0)));
+						at->second.bitmap = at->second.view->render(uint32_t(std::max(1.0f, (it.x1 - it.x0) * overlay->scale())), uint32_t(std::max(1.0f, (it.y1 - it.y0) * overlay->scale())));
 		}
 
 		bool drawHead(const UiItem& it)
@@ -769,8 +772,8 @@ namespace oc4::render
 			XMStoreFloat4(&c, XMVector4Transform(XMVectorSet(p.x, p.y, p.z, 1), viewProjection()));
 			if (c.w <= 0)
 				return false;
-			sx = (c.x / c.w * 0.5f + 0.5f) * float(renderer->width());
-			sy = (0.5f - c.y / c.w * 0.5f) * float(renderer->height());
+			sx = (c.x / c.w * 0.5f + 0.5f) * overlay->screenWidth();
+			sy = (0.5f - c.y / c.w * 0.5f) * overlay->screenHeight();
 			return true;
 		}
 
@@ -869,9 +872,9 @@ namespace oc4::render
 				XMStoreFloat4(&c, XMVector4Transform(XMVectorSet(wx, wy, view->groundHeight(wx, wy) + lift, 1), vp));
 				if (c.w <= 0)
 					return false;
-				sx = (c.x / c.w * 0.5f + 0.5f) * float(renderer->width());
-				sy = (0.5f - c.y / c.w * 0.5f) * float(renderer->height());
-				return sx > -40 && sy > -40 && sx < float(renderer->width()) + 40 && sy < float(renderer->height()) + 40;
+				sx = (c.x / c.w * 0.5f + 0.5f) * overlay->screenWidth();
+				sy = (0.5f - c.y / c.w * 0.5f) * overlay->screenHeight();
+				return sx > -40 && sy > -40 && sx < overlay->screenWidth() + 40 && sy < overlay->screenHeight() + 40;
 			};
 			const float zoom = std::clamp(12 * plot() / camera.distance, 0.6f, 1.4f);
 			for (int y = 0; y < map.height; ++y)
@@ -948,8 +951,8 @@ namespace oc4::render
 				XMStoreFloat4(&c, XMVector4Transform(XMVectorSet(wx, wy, view->groundHeight(wx, wy) + 2, 1), vp));
 				if (c.w <= 0)
 					return false;
-				sx = (c.x / c.w * 0.5f + 0.5f) * float(renderer->width());
-				sy = (0.5f - c.y / c.w * 0.5f) * float(renderer->height());
+				sx = (c.x / c.w * 0.5f + 0.5f) * overlay->screenWidth();
+				sy = (0.5f - c.y / c.w * 0.5f) * overlay->screenHeight();
 				return true;
 			};
 			const Color way = path.reachable ? Color{ 0.95f, 0.95f, 0.85f } : Color{ 1, 0.3f, 0.25f };
@@ -1181,7 +1184,8 @@ namespace oc4::render
 			// The ground under the screen's corners.
 			const Vec3 size = view->worldSize();
 			const auto toMini = [&](Vec3 p) { return std::pair{ x0 + p.x / size.x * w, y1 - p.y / size.y * h }; };
-			const int sx[4] = { 0, int(renderer->width()) - 1, int(renderer->width()) - 1, 0 }, sy[4] = { 0, 0, int(renderer->height()) - 1, int(renderer->height()) - 1 };
+			const int sw = int(overlay->screenWidth()), sh = int(overlay->screenHeight());
+			const int sx[4] = { 0, sw - 1, sw - 1, 0 }, sy[4] = { 0, 0, sh - 1, sh - 1 };
 			std::pair<float, float> c[4];
 			for (int i = 0; i < 4; ++i)
 			{
@@ -1265,9 +1269,14 @@ namespace oc4::render
 			renderer->present();
 		}
 
+		float windowDensity() const { return window ? SDL_GetWindowPixelDensity(window) : 1; }
+
+		void updateUiScale() { overlay->setScale(uiScaleFor(uiPercent, windowDensity(), renderer->width(), renderer->height())); }
+
 		void onEvent(const SDL_Event& e)
 		{
-			const float density = SDL_GetWindowPixelDensity(window);
+			// (the window's points to the interface's units, which the mouse is in)
+			const float density = SDL_GetWindowPixelDensity(window) / overlay->scale();
 			const auto px = [&](float v) { return int(std::floor(v * density)); };
 			switch (e.type)
 			{
@@ -1305,7 +1314,10 @@ namespace oc4::render
 			case SDL_EVENT_WINDOW_MOUSE_LEAVE: mouseX = -1; break;
 			case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
 				if (e.window.data1 > 0 && e.window.data2 > 0)
+				{
 					renderer->resize(uint32_t(e.window.data1), uint32_t(e.window.data2));
+					updateUiScale();
+				}
 				break;
 			case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
 			case SDL_EVENT_QUIT: open = false; break;
@@ -1541,8 +1553,16 @@ namespace oc4::render
 	void MapWindow::setPopupHelp(std::function<std::string(int item)> help) { m->popupHelp = std::move(help); }
 	void MapWindow::setUiWheel(std::function<bool(int x, int y, int delta)> wheel) { m->uiWheel = std::move(wheel); }
 	void MapWindow::setUi(std::vector<UiItem> items) { m->ui.set(std::move(items)); }
-	uint32_t MapWindow::width() const { return m->renderer->width(); }
-	uint32_t MapWindow::height() const { return m->renderer->height(); }
+	uint32_t MapWindow::width() const { return uint32_t(uiUnits(m->renderer->width(), m->overlay->scale())); }
+	uint32_t MapWindow::height() const { return uint32_t(uiUnits(m->renderer->height(), m->overlay->scale())); }
+	void MapWindow::setUiScale(int percent)
+	{
+		if (percent == m->uiPercent)
+			return;
+		m->uiPercent = percent;
+		m->updateUiScale();
+	}
+	MapWindow::UiDisplay MapWindow::uiDisplay() const { return { m->renderer->width(), m->renderer->height(), m->windowDensity() }; }
 	bool MapWindow::uiActive() const { return m->ui.active(); }
 	std::vector<MapWindow::UiClick> MapWindow::takeUiClicks() { return std::exchange(m->uiClicks, {}); }
 	int MapWindow::uiHovered() const { return m->ui.hovered(); }

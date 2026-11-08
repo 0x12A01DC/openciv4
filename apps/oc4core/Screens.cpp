@@ -8,6 +8,7 @@
 #include "core/FileUtil.h"
 #include "media/Movie.h"
 #include "render/Input.h"
+#include "render/UiScale.h"
 
 #include "CvGameCoreDLL.h"
 #include "CvCity.h"
@@ -124,6 +125,7 @@ namespace oc4::host
 
 		std::wstring g_help; // the help shown now (CyInterface.getHelpString)
 		std::function<int(const std::string&, int)> g_textWidth; // how wide a text is in the window
+		render::MapWindow::UiDisplay g_display; // the window's, for the scale's choices
 		std::function<int(const std::string&, int, int)> g_textHeight; // how high it is, wrapped at a width
 
 		// (before the window is up: its markup left out, a symbol about two letters wide)
@@ -256,6 +258,11 @@ namespace oc4::host
 		// (the graphic options it has: the game core and the window ask the utility)
 		host.def("set_graphic_option", [&utility](int option, bool on) { utility.setGraphicOption(option, on); });
 		host.def("reset_graphic_options", [&utility] { utility.resetGraphicOptions(); });
+		host.def("set_ui_scale", [&utility](int percent) { utility.setUiScale(percent); });
+		host.def("ui_size_at", [](int percent) {
+			const float scale = render::uiScaleFor(percent, g_display.density, g_display.width, g_display.height);
+			return std::pair{ render::uiUnits(g_display.width, scale), render::uiUnits(g_display.height, scale) };
+		});
 		// The globe view's layers (oc4screens' CyGlobeLayerManager): the game core's, the one
 		// shown and its option, chosen.
 		host.def("globe_up", [&engine] { return bool(engine.globeUp); });
@@ -798,6 +805,9 @@ if _walls:
 
 	void Screens::frame(render::MapWindow& window, int width, int height)
 	{
+		// (a new scale: the next frame's size, which lays the screens out again)
+		window.setUiScale(m_utility.uiScale());
+		g_display = window.uiDisplay();
 		if (!m_active)
 			return;
 		if (m_menu)

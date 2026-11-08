@@ -228,7 +228,9 @@ namespace oc4::render
 		m_draws.push_back(d);
 	}
 
-	void Overlay::vertex(float x, float y, uint32_t color, float u, float v)
+	void Overlay::vertex(float x, float y, uint32_t color, float u, float v) { pixelVertex(x * m_scale, y * m_scale, color, u, v); }
+
+	void Overlay::pixelVertex(float x, float y, uint32_t color, float u, float v)
 	{
 		m_vertices.push_back({ x, y, u, v, color });
 		++m_draws.back().count;
@@ -284,8 +286,9 @@ namespace oc4::render
 			return;
 		use(nullptr);
 		const auto o = outward(p);
-		const auto in = [&](size_t i) { return std::array<float, 2>{ p[i][0] - o[i][0] * 0.5f, p[i][1] - o[i][1] * 0.5f }; };
-		const auto out = [&](size_t i) { return std::array<float, 2>{ p[i][0] + o[i][0] * 0.5f, p[i][1] + o[i][1] * 0.5f }; };
+		const float soft = 0.5f / m_scale; // (the soft edge: a pixel wide at any scale)
+		const auto in = [&](size_t i) { return std::array<float, 2>{ p[i][0] - o[i][0] * soft, p[i][1] - o[i][1] * soft }; };
+		const auto out = [&](size_t i) { return std::array<float, 2>{ p[i][0] + o[i][0] * soft, p[i][1] + o[i][1] * soft }; };
 		for (size_t i = 1; i + 1 < n; ++i)
 		{
 			vertex(in(0)[0], in(0)[1], color);
@@ -311,8 +314,9 @@ namespace oc4::render
 			return;
 		use(nullptr);
 		const auto o = outward(p);
-		const uint32_t peak = width < 1 ? scaled(color, width) : color;
-		const float edge = width / 2 + 0.5f, solid = std::max(width / 2 - 0.5f, 0.0f);
+		const float pixels = width * m_scale, soft = 0.5f / m_scale;
+		const uint32_t peak = pixels < 1 ? scaled(color, pixels) : color;
+		const float edge = width / 2 + soft, solid = std::max(width / 2 - soft, 0.0f);
 		const auto strip = [&](float t0, uint32_t c0, float t1, uint32_t c1) {
 			for (size_t i = 0; i < n; ++i)
 			{
@@ -369,8 +373,9 @@ namespace oc4::render
 			return;
 		use(nullptr);
 		const float nx = -(y1 - y0) / len, ny = (x1 - x0) / len;
-		const uint32_t c = premultiplied(color, alpha), peak = lineWidth < 1 ? scaled(c, lineWidth) : c;
-		const float edge = lineWidth / 2 + 0.5f, solid = std::max(lineWidth / 2 - 0.5f, 0.0f);
+		const float pixels = lineWidth * m_scale, soft = 0.5f / m_scale;
+		const uint32_t c = premultiplied(color, alpha), peak = pixels < 1 ? scaled(c, pixels) : c;
+		const float edge = lineWidth / 2 + soft, solid = std::max(lineWidth / 2 - soft, 0.0f);
 		const auto strip = [&](float t0, uint32_t c0, float t1, uint32_t c1) {
 			vertex(x0 + nx * t0, y0 + ny * t0, c0), vertex(x1 + nx * t0, y1 + ny * t0, c0), vertex(x1 + nx * t1, y1 + ny * t1, c1);
 			vertex(x0 + nx * t0, y0 + ny * t0, c0), vertex(x1 + nx * t1, y1 + ny * t1, c1), vertex(x0 + nx * t1, y0 + ny * t1, c1);
@@ -458,7 +463,7 @@ namespace oc4::render
 	{
 		if (!m_drawing)
 			return;
-		std::array<int32_t, 4> c{ pixel(x0), pixel(y0), pixel(x1), pixel(y1) };
+		std::array<int32_t, 4> c{ pixel(x0 * m_scale), pixel(y0 * m_scale), pixel(x1 * m_scale), pixel(y1 * m_scale) };
 		if (!m_clips.empty())
 		{
 			const auto& outer = m_clips.back();
@@ -549,20 +554,20 @@ namespace oc4::render
 		};
 		for (const LaidText::Glyph& g : l.laid.glyphs)
 		{
-			const float gx = x + g.x;
+			const float gx = (x + g.x) * m_scale;
 			float ix = std::floor(gx);
 			int quarter = int((gx - ix) * 4 + 0.5f);
 			if (quarter == 4)
 				quarter = 0, ix += 1;
-			const GlyphSlot* s = glyph(g.face, g.index, g.size, quarter);
+			const GlyphSlot* s = glyph(g.face, g.index, g.size * m_scale, quarter);
 			if (!s->width)
 				continue;
 			use(m_atlas.get());
-			const float x0 = ix + float(s->left), y0 = std::floor(y + g.baseline + 0.5f) + float(s->top), x1 = x0 + float(s->width), y1 = y0 + float(s->height);
+			const float x0 = ix + float(s->left), y0 = std::floor((y + g.baseline) * m_scale + 0.5f) + float(s->top), x1 = x0 + float(s->width), y1 = y0 + float(s->height);
 			const float k = 1.0f / kAtlasSize, u0 = float(s->x) * k, v0 = float(s->y) * k, u1 = float(s->x + s->width) * k, v1 = float(s->y + s->height) * k;
 			const uint32_t c = colourOf(g.rgba);
-			vertex(x0, y0, c, u0, v0), vertex(x1, y0, c, u1, v0), vertex(x1, y1, c, u1, v1);
-			vertex(x0, y0, c, u0, v0), vertex(x1, y1, c, u1, v1), vertex(x0, y1, c, u0, v1);
+			pixelVertex(x0, y0, c, u0, v0), pixelVertex(x1, y0, c, u1, v0), pixelVertex(x1, y1, c, u1, v1);
+			pixelVertex(x0, y0, c, u0, v0), pixelVertex(x1, y1, c, u1, v1), pixelVertex(x0, y1, c, u0, v1);
 		}
 		for (const LaidText::Underline& u : l.laid.underlines)
 			fillConvex(roundedRect(x + u.x0, y + u.y, x + u.x1, y + u.y + u.thickness, 0), colourOf(u.rgba));

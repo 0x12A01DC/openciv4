@@ -140,6 +140,10 @@ oc4core.exe --load game50.CivBeyondSwordSave --view
 oc4core.exe --turns 50 --screenshot map.png --look 40,30,12 --view-size 1920x1080
 ```
 
+The interface has a scale of its own: the Screen Resolution choice on the options' Graphics tab
+(Auto follows the window's pixel density), or `--ui-scale PERCENT` for one run. The map keeps
+all the window's pixels.
+
 Tools for the game's files, in `build\Release\bin`:
 
 * `nifview` browses the models and their animations (`--filter art/units/`), or renders one

@@ -4,7 +4,7 @@
 //           [--turns N [--map Continents] [--size SMALL] [--players N] [--seed N]]
 //           [--load <file.CivBeyondSwordSave>] [--save <file.CivBeyondSwordSave> [--save-at TURN]]
 //           [--profile] [--profile-out <stacks.folded>] [--rand-log] [--exec <script.py>] [--exec-first <script.py>]
-//           [--menu | --view | --play [--screenshot <file.png>] [--view-size WxH] [--look X,Y[,distance in plots]] [--keys <window keys>]
+//           [--menu | --view | --play [--screenshot <file.png>] [--view-size WxH] [--ui-scale PERCENT] [--look X,Y[,distance in plots]] [--keys <window keys>]
 //            [--view-seconds S]]
 //           [--host PORT [--humans N] | --join HOST:PORT]
 //
@@ -134,6 +134,7 @@ namespace
 		bool ownInterface = false; // ... with the host's interface instead of the game's
 		fs::path screenshot;  // ... or rendered into a file
 		unsigned viewWidth = 1600, viewHeight = 900;
+		int uiScale = -1; // the interface's, in percent, 0 the window's density (-1: the profile's)
 		int lookX = -1, lookY = -1;
 		float lookDistance = 9;
 		double viewSeconds = 0; // development: close the window after this long
@@ -224,7 +225,7 @@ namespace
 					throw std::runtime_error("missing value for an option");
 				return argv[++i];
 			};
-			if (a == L"--civ4" || a == L"--mod" || a == L"--python-home" || a == L"--log-dir" || a == L"--view-size")
+			if (a == L"--civ4" || a == L"--mod" || a == L"--python-home" || a == L"--log-dir" || a == L"--view-size" || a == L"--ui-scale")
 				if (i + 1 < argc)
 					o.kept.insert(o.kept.end(), { a, argv[i + 1] });
 			if (a == L"--civ4")
@@ -294,6 +295,8 @@ namespace
 				if (std::swscanf(next().wstring().c_str(), L"%ux%u", &o.viewWidth, &o.viewHeight) != 2)
 					throw std::runtime_error("--view-size takes WxH");
 			}
+			else if (a == L"--ui-scale")
+				o.uiScale = std::stoi(next().wstring());
 			else if (a == L"--plot-help")
 			{
 				if (std::swscanf(next().wstring().c_str(), L"%d,%d", &o.helpX, &o.helpY) != 2)
@@ -549,6 +552,9 @@ namespace
 			render::MapWindow& window;
 			~ForgetWheel() { window.setUiWheel({}); } // (the screens go first)
 		} forgetWheel{ window };
+		if (opt.uiScale >= 0)
+			utility.forceUiScale(opt.uiScale);
+		window.setUiScale(utility.uiScale());
 		if (!opt.ownInterface && !screens.start(int(window.width()), int(window.height())))
 			std::printf("  the game's interface did not start: the host's own\n");
 		int preparedTurn = -1;
@@ -1511,6 +1517,9 @@ namespace
 			saveFolders = { { bts / L"single", "single" }, { bts / L"single" / L"auto", "auto" }, { bts / L"multi", "multi" },
 				{ documents / L"My Games" / L"openciv4" / L"Saves" / L"auto", "openciv4 auto" } };
 		}
+		if (opt.uiScale >= 0)
+			utility.forceUiScale(opt.uiScale);
+		window.setUiScale(utility.uiScale());
 		if (!screens.startMenu(int(window.width()), int(window.height()), title, mapScripts, saveFolders, mods, message, opt.menuPage))
 			throw std::runtime_error("the main menu did not start");
 		// Its music (the mod's, if it has its own), unless sound is off.

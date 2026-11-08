@@ -323,6 +323,12 @@ target_link_libraries(hash_map_test PRIVATE oc4_options)
 add_test(NAME hash_map COMMAND hash_map_test)
 set_target_properties(hash_map_test PROPERTIES FOLDER "tests")
 
+add_executable(ui_scale_test tests/ui_scale_test.cpp)
+target_include_directories(ui_scale_test PRIVATE src)
+target_link_libraries(ui_scale_test PRIVATE oc4_options)
+add_test(NAME ui_scale COMMAND ui_scale_test)
+set_target_properties(ui_scale_test PROPERTIES FOLDER "tests")
+
 add_executable(globe_bend_test tests/globe_bend_test.cpp)
 target_include_directories(globe_bend_test PRIVATE src)
 target_link_libraries(globe_bend_test PRIVATE oc4_options)
