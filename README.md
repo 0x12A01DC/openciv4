@@ -144,6 +144,9 @@ The interface has a scale of its own: the Screen Resolution choice on the option
 (Auto follows the window's pixel density), or `--ui-scale PERCENT` for one run. The map keeps
 all the window's pixels.
 
+Ctrl+Shift+F shows the frame rate and the longest frame of the last half second (`--show-fps`
+from the start).
+
 Tools for the game's files, in `build\Release\bin`:
 
 * `nifview` browses the models and their animations (`--filter art/units/`), or renders one

@@ -329,6 +329,12 @@ target_link_libraries(ui_scale_test PRIVATE oc4_options)
 add_test(NAME ui_scale COMMAND ui_scale_test)
 set_target_properties(ui_scale_test PROPERTIES FOLDER "tests")
 
+add_executable(frame_stats_test tests/frame_stats_test.cpp)
+target_include_directories(frame_stats_test PRIVATE src)
+target_link_libraries(frame_stats_test PRIVATE oc4_options)
+add_test(NAME frame_stats COMMAND frame_stats_test)
+set_target_properties(frame_stats_test PROPERTIES FOLDER "tests")
+
 add_executable(globe_bend_test tests/globe_bend_test.cpp)
 target_include_directories(globe_bend_test PRIVATE src)
 target_link_libraries(globe_bend_test PRIVATE oc4_options)

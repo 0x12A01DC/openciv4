@@ -49,6 +49,8 @@ namespace oc4::render
 		// click positions are in.
 		uint32_t width() const;
 		uint32_t height() const;
+		// The frame rate in the corner (Ctrl+Shift+F changes it).
+		void setFrameRateShown(bool shown);
 		// The interface's scale in percent, 0 for the window's density.
 		void setUiScale(int percent);
 		struct UiDisplay

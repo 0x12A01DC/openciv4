@@ -1,4 +1,5 @@
 #include "render/MapWindow.h"
+#include "render/FrameStats.h"
 #include "render/GlobeBend.h"
 #include "render/UiScale.h"
 
@@ -121,6 +122,9 @@ namespace oc4::render
 		std::string status, title;
 		int mouseX = -1, mouseY = -1; // (in the interface's units, as the screens are)
 		int uiPercent = 0; // (0: the window's density)
+		bool showFrameRate = false; // (Ctrl+Shift+F)
+		FrameStats frameStats;
+		std::chrono::steady_clock::time_point lastFrame{};
 		bool panning = false, orbiting = false, minimapDrag = false;
 		bool playing = false;
 		std::filesystem::path screenshotFolder;
@@ -335,6 +339,12 @@ namespace oc4::render
 				if (k == key::Back)
 					popup.character(L'\b');
 				popup.key(k);
+				return;
+			}
+			// (the game has no Ctrl+Shift+F, and this works over its screens and popups too)
+			if (ctrl && shift && !alt && k == 'F')
+			{
+				showFrameRate = !showFrameRate;
 				return;
 			}
 			// Playing, the game takes the keys (its hotkeys, Esc too: Ctrl+S saves, Ctrl+B bares the
@@ -740,7 +750,19 @@ namespace oc4::render
 			if (!popup.active())
 				drawPlotHelp();
 			popup.draw(*overlay, busy ? std::function<std::string(int)>{} : popupHelp);
+			if (showFrameRate)
+				drawFrameRate();
 			overlay->end();
+		}
+
+		// Under the interface's top left corner, over everything.
+		void drawFrameRate()
+		{
+			const std::wstring text = frameStats.ready() ?
+				std::format(L"{} FPS, worst {} ms", std::lround(frameStats.fps()), std::lround(frameStats.worstMs())) : std::wstring(L"Measuring...");
+			const float size = 13, x = 8, y = 76, width = overlay->width(text, size, true);
+			overlay->rect(x, y, x + width + 14, y + 23, { 0.03f, 0.04f, 0.06f }, 0.75f, 4);
+			overlay->text(text, x + 7, y + 4, size, { 1, 1, 1 }, 1, true);
 		}
 
 		// The globe view: the map round a sphere under the point looked at, once round its width
@@ -1258,6 +1280,11 @@ namespace oc4::render
 
 		void frame(float dt)
 		{
+			// (the real time: dt is limited for the animations, and a stutter should show)
+			const auto now = std::chrono::steady_clock::now();
+			if (lastFrame != std::chrono::steady_clock::time_point{})
+				frameStats.add(std::chrono::duration<double>(now - lastFrame).count());
+			lastFrame = now;
 			clock += dt;
 			handleHeldKeys(dt);
 			view->update(dt);
@@ -1562,6 +1589,7 @@ namespace oc4::render
 		m->uiPercent = percent;
 		m->updateUiScale();
 	}
+	void MapWindow::setFrameRateShown(bool shown) { m->showFrameRate = shown; }
 	MapWindow::UiDisplay MapWindow::uiDisplay() const { return { m->renderer->width(), m->renderer->height(), m->windowDensity() }; }
 	bool MapWindow::uiActive() const { return m->ui.active(); }
 	std::vector<MapWindow::UiClick> MapWindow::takeUiClicks() { return std::exchange(m->uiClicks, {}); }

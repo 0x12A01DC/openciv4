@@ -4,7 +4,7 @@
 //           [--turns N [--map Continents] [--size SMALL] [--players N] [--seed N]]
 //           [--load <file.CivBeyondSwordSave>] [--save <file.CivBeyondSwordSave> [--save-at TURN]]
 //           [--profile] [--profile-out <stacks.folded>] [--rand-log] [--exec <script.py>] [--exec-first <script.py>]
-//           [--menu | --view | --play [--screenshot <file.png>] [--view-size WxH] [--ui-scale PERCENT] [--look X,Y[,distance in plots]] [--keys <window keys>]
+//           [--menu | --view | --play [--screenshot <file.png>] [--view-size WxH] [--ui-scale PERCENT] [--show-fps] [--look X,Y[,distance in plots]] [--keys <window keys>]
 //            [--view-seconds S]]
 //           [--host PORT [--humans N] | --join HOST:PORT]
 //
@@ -134,6 +134,7 @@ namespace
 		bool ownInterface = false; // ... with the host's interface instead of the game's
 		fs::path screenshot;  // ... or rendered into a file
 		unsigned viewWidth = 1600, viewHeight = 900;
+		bool showFps = false; // the frame rate in the corner from the start
 		int uiScale = -1; // the interface's, in percent, 0 the window's density (-1: the profile's)
 		int lookX = -1, lookY = -1;
 		float lookDistance = 9;
@@ -295,6 +296,8 @@ namespace
 				if (std::swscanf(next().wstring().c_str(), L"%ux%u", &o.viewWidth, &o.viewHeight) != 2)
 					throw std::runtime_error("--view-size takes WxH");
 			}
+			else if (a == L"--show-fps")
+				o.showFps = true;
 			else if (a == L"--ui-scale")
 				o.uiScale = std::stoi(next().wstring());
 			else if (a == L"--plot-help")
@@ -554,6 +557,8 @@ namespace
 		} forgetWheel{ window };
 		if (opt.uiScale >= 0)
 			utility.forceUiScale(opt.uiScale);
+		if (opt.showFps)
+			window.setFrameRateShown(true);
 		window.setUiScale(utility.uiScale());
 		if (!opt.ownInterface && !screens.start(int(window.width()), int(window.height())))
 			std::printf("  the game's interface did not start: the host's own\n");
@@ -1519,6 +1524,8 @@ namespace
 		}
 		if (opt.uiScale >= 0)
 			utility.forceUiScale(opt.uiScale);
+		if (opt.showFps)
+			window.setFrameRateShown(true);
 		window.setUiScale(utility.uiScale());
 		if (!screens.startMenu(int(window.width()), int(window.height()), title, mapScripts, saveFolders, mods, message, opt.menuPage))
 			throw std::runtime_error("the main menu did not start");
