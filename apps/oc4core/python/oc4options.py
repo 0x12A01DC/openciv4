@@ -533,6 +533,12 @@ def _place(screen, n, x, y, w, h):
 		screen.addPanel(name, u'', u'', True, False, x, y + 4, w, 2, _cpe.PanelStyles.PANEL_STYLE_MAIN)
 
 
+def resized():
+	"""Another size: the window laid out again for it, as it would not be otherwise."""
+	if _state['ctrl'] is not None:
+		_schedule()
+
+
 def relayout():
 	"""(before the screens are drawn: the tab control laid out again if it changed)"""
 	if not _state['dirty']:
