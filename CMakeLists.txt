@@ -38,7 +38,7 @@ endif()
 
 if(NOT WIN32)
 	# The small part of Win32 the engine's tools and the renderer use, and the wmain entry point.
-	add_library(oc4_posix STATIC gamecore/compat/posix/oc4_posix.cpp gamecore/compat/posix/oc4_wmain.cpp)
+	add_library(oc4_posix STATIC gamecore/compat/posix/oc4_posix.cpp src/posix/oc4_wmain.cpp)
 	target_include_directories(oc4_posix PUBLIC gamecore/compat/posix)
 	target_compile_features(oc4_posix PUBLIC cxx_std_20)
 	target_link_libraries(oc4_options INTERFACE oc4_posix)
