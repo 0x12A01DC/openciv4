@@ -191,7 +191,7 @@ add_library(oc4_render STATIC
 	src/render/TextLayout.cpp
 	src/render/Theme.cpp
 )
-target_link_libraries(oc4_render PUBLIC oc4_anim oc4_gfx oc4_media SDL3::SDL3-static oc4_options)
+target_link_libraries(oc4_render PUBLIC oc4_anim oc4_gfx oc4_media SDL3::SDL3-static PRIVATE oc4_options)
 if(WIN32)
 	target_link_libraries(oc4_render PUBLIC d3dcompiler dwrite windowscodecs ole32)
 endif()
@@ -291,7 +291,11 @@ foreach(_py IN ITEMS oc4engine:kOc4EnginePy oc4screens:kOc4ScreensPy oc4menu:kOc
 	configure_file("${CMAKE_BINARY_DIR}/generated/${_py_name}_py.h.tmp" "${CMAKE_BINARY_DIR}/generated/${_py_name}_py.h" COPYONLY)
 endforeach()
 target_include_directories(oc4core PRIVATE apps/oc4core "${CMAKE_BINARY_DIR}/generated")
-target_link_libraries(oc4core PRIVATE CvGameCoreDLL oc4_core oc4_render oc4_audio oc4_zlib oc4_options)
+target_link_libraries(oc4core PRIVATE CvGameCoreDLL oc4_core oc4_render oc4_audio oc4_zlib)
+if(NOT MSVC)
+	# (only the POSIX layer and DirectXMath: on MSVC oc4core keeps the SDK's own dialect)
+	target_link_libraries(oc4core PRIVATE oc4_options)
+endif()
 if(WIN32)
 	target_link_libraries(oc4core PRIVATE dbghelp bcrypt winmm shell32 ole32 advapi32 ws2_32)
 endif()

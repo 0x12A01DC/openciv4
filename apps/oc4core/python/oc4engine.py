@@ -30,22 +30,6 @@ sys.stdout = _LogWriter('PythonDbg.log')
 sys.stderr = _LogWriter('PythonErr.log', sys.__stderr__)
 
 
-# The original event scripts sort (value, city) tuples. On a tie Python 2 compares the objects
-# by memory address, so a game's outcome would depend on where they happen to live (Influenza
-# picks the cities it hits this way). Ties go by the game's own ids instead.
-def _orderBy(cls, key):
-	# (scripts also test `None == city`: anything else keeps Python's own comparison)
-	def compare(a, b):
-		if isinstance(a, cls) and isinstance(b, cls):
-			return cmp(key(a), key(b))
-		return cmp(id(a), id(b))
-	cls.__cmp__ = compare
-
-_orderBy(_cpe.CyCity, lambda c: (c.getOwner(), c.getID()))
-_orderBy(_cpe.CyPlot, lambda p: (p.getX(), p.getY()))
-_orderBy(_cpe.CyPlayer, lambda p: p.getID())
-
-
 class _Stub(object):
 	_silent = False
 	_logAll = __import__('os').environ.get('OC4_STUB_LOG') is not None
