@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <utility>
+#include <array>
 
 namespace oc4::host
 {
@@ -203,19 +204,28 @@ namespace oc4::host
 
 		void createChildren(FAStar& f, FAStarNode* node)
 		{
-			for (int dx = -1; dx <= 1; ++dx)
+			static constexpr auto plotDirection = std::array<std::pair<int,int>, 8>{
 			{
-				for (int dy = -1; dy <= 1; ++dy)
-				{
-					if ((dx == 0 && dy == 0) || (f.cardinalOnly && dx != 0 && dy != 0))
-						continue;
-					FAStarNode* child = nodeAt(f, node->m_iX + dx, node->m_iY + dy);
-					if (!child)
-						continue;
-					if (f.valid && !f.valid(node, child, 0, f.data, &f))
-						continue;
-					linkChild(f, node, child);
-				}
+				{ -1, 0 }, // DIRECTION_WEST
+				{ 0, -1 }, // DIRECTION_SOUTH
+				{ 1, 0 }, // DIRECTION_EAST
+				{ 0, 1 }, // DIRECTION_NORTH
+				{ -1, 1 }, // DIRECTION_NORTHWEST
+				{ -1, -1 }, // DIRECTION_SOUTHWEST
+				{ 1, -1 }, // DIRECTION_SOUTHEAST
+				{ 1, 1 }, // DIRECTION_NORTHEAST
+			} };
+
+			const size_t range = f.cardinalOnly ? 4 : 8;
+
+			for (size_t iI = 0; iI < range; ++iI)
+			{
+				FAStarNode* child = nodeAt(f, node->m_iX + plotDirection[iI].first, node->m_iY + plotDirection[iI].second);
+				if (!child)
+					continue;
+				if (f.valid && !f.valid(node, child, 0, f.data, &f))
+					continue;
+				linkChild(f, node, child);
 			}
 		}
 
