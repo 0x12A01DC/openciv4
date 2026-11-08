@@ -1446,11 +1446,16 @@ namespace oc4::render
 		o.healthBars = g.healthBars;
 		o.frozen = g.frozen;
 		o.effects = g.effects;
-		if (!m->window || g.fullscreen == m->fullscreen)
+		setFullscreen(g.fullscreen);
+	}
+
+	void MapWindow::setFullscreen(bool on)
+	{
+		if (!m->window || on == m->fullscreen)
 			return;
-		m->fullscreen = g.fullscreen;
+		m->fullscreen = on;
 		// (borderless over the whole monitor the window is on)
-		SDL_SetWindowFullscreen(m->window, g.fullscreen);
+		SDL_SetWindowFullscreen(m->window, on);
 	}
 
 	void MapWindow::setYieldSymbols(std::array<std::string, 3> symbols)

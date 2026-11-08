@@ -233,6 +233,8 @@ namespace oc4::render
 			bool healthBars = false, frozen = false, effects = true, fullscreen = false;
 		};
 		void setGraphics(Graphics graphics);
+		// Full screen or windowed (the profile's option; the menu's too, not only a game's).
+		void setFullscreen(bool on);
 		// The globe view: the camera back over the whole map (on), where it was (off).
 		void setGlobeView(bool up);
 		void setYieldSymbols(std::array<std::string, 3> symbols);
