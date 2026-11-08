@@ -259,6 +259,10 @@ namespace oc4::host
 		host.def("set_graphic_option", [&utility](int option, bool on) { utility.setGraphicOption(option, on); });
 		host.def("reset_graphic_options", [&utility] { utility.resetGraphicOptions(); });
 		host.def("set_ui_scale", [&utility](int percent) { utility.setUiScale(percent); });
+		// W A S D panning: the profile's, as loaded; the player's, from the options' check box.
+		host.def("set_wasd_pan", [&utility](bool on) { utility.setWasdPan(on); });
+		host.def("choose_wasd_pan", [&utility](bool on) { utility.chooseWasdPan(on); });
+		host.def("wasd_pan", [&utility] { return utility.wasdPan(); });
 		host.def("ui_size_at", [](int percent) {
 			const float scale = render::uiScaleFor(percent, g_display.density, g_display.width, g_display.height);
 			return std::pair{ render::uiUnits(g_display.width, scale), render::uiUnits(g_display.height, scale) };
@@ -824,6 +828,20 @@ if _walls:
 	{
 		// (a new scale: the next frame's size, which lays the screens out again)
 		window.setUiScale(m_utility.uiScale());
+		// (Ctrl+Shift+W in the window: the player's choice, kept in the profile)
+		if (const auto toggled = window.takeWasdPanToggle())
+		{
+			m_utility.chooseWasdPan(*toggled);
+			try
+			{
+				py::module_::import("oc4options").attr("setWasdPan")(*toggled);
+			}
+			catch (py::error_already_set& e)
+			{
+				printPythonError(e);
+			}
+		}
+		window.setWasdPan(m_utility.wasdPan());
 		g_display = window.uiDisplay();
 		window.setUiTakesKeys(menuUp());
 		if (!m_active)

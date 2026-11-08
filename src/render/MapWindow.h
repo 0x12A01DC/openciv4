@@ -53,6 +53,11 @@ namespace oc4::render
 		// map, Return and Space use what they chose.
 		void setUiTakesKeys(bool takes);
 		void pressKey(unsigned key); // (as if typed)
+		// W A S D pan the map as the arrows do (the letters alone, no menu up; WasdPan.h).
+		// Ctrl+Shift+W changes it: takeWasdPanToggle has what it was changed to since last asked.
+		void setWasdPan(bool on);
+		bool wasdPan() const;
+		std::optional<bool> takeWasdPanToggle();
 		// The frame rate in the corner (Ctrl+Shift+F changes it).
 		void setFrameRateShown(bool shown);
 		// The interface's scale in percent, 0 for the window's density.

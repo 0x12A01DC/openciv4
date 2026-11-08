@@ -33,6 +33,7 @@ _profile = {
 	'clock': False, 'hours24': False,
 	'graphicsLevel': 0, 'renderQuality': 0, 'globeView': 0, 'movieQuality': 0, 'mainMenu': 0, 'antiAliasing': 0, 'uiScale': 0,
 	'speakers': '', 'musicPath': '', 'voice': False,
+	'wasdPan': False,
 }
 
 
@@ -64,7 +65,7 @@ def _load():
 					_profile['nosound'][parts[1]] = value == '1'
 				elif parts[0] in ('graphic', 'player'):
 					_profile[parts[0]][int(parts[1])] = value == '1'
-				elif parts[0] in ('clock', 'hours24', 'voice'):
+				elif parts[0] in ('clock', 'hours24', 'voice', 'wasdPan'):
 					_profile[parts[0]] = value == '1'
 				elif parts[0] in ('graphicsLevel', 'renderQuality', 'globeView', 'movieQuality', 'mainMenu', 'antiAliasing', 'uiScale'):
 					_profile[parts[0]] = int(value)
@@ -83,7 +84,7 @@ def _save():
 	lines = []
 	for key in ('name', 'speakers', 'musicPath'):
 		lines.append('%s=%s' % (key, _profile[key]))
-	for key in ('clock', 'hours24', 'voice'):
+	for key in ('clock', 'hours24', 'voice', 'wasdPan'):
 		lines.append('%s=%d' % (key, 1 if _profile[key] else 0))
 	for key in ('graphicsLevel', 'renderQuality', 'globeView', 'movieQuality', 'mainMenu', 'antiAliasing', 'uiScale'):
 		lines.append('%s=%d' % (key, _profile[key]))
@@ -108,8 +109,41 @@ def _applyGraphics():
 		for i, on in _profile['graphic'].items():
 			oc4host.set_graphic_option(int(i), bool(on))
 		oc4host.set_ui_scale(_profile['uiScale'])
+		oc4host.set_wasd_pan(_profile['wasdPan'])
 	except Exception:
 		pass
+
+
+# W A S D panning (openciv4's own option, no game's): its check box on the options' Game tab,
+# above the language; Ctrl+Shift+W in the window changes it too (the host calls setWasdPan).
+WASD_PAN_CHECKBOX = 'Oc4WasdPanCheckBox'
+
+
+def setWasdPan(on):
+	"""Ctrl+Shift+W: the player's choice, kept."""
+	_profile['wasdPan'] = bool(on)
+	_save()
+	ctrl = _state['ctrl']
+	if ctrl is not None:
+		ctrl.setValue(WASD_PAN_CHECKBOX, bool(on))
+
+
+def handleWasdPanClicked(args):
+	on = bool(args[0])
+	_profile['wasdPan'] = on
+	_save()
+	try:
+		oc4host.choose_wasd_pan(on)
+	except Exception:
+		pass
+	return 1
+
+
+def _wasdPanOn():
+	try:
+		return bool(oc4host.wasd_pan())
+	except Exception:
+		return _profile['wasdPan']
 
 
 def _graphicDefault(i):
@@ -339,7 +373,15 @@ class CyGTabCtrl(object):
 		_schedule()
 
 	def attachVBox(self, parent, name): self._node('vbox', parent, name)
-	def attachHBox(self, parent, name): self._node('hbox', parent, name)
+	def attachHBox(self, parent, name):
+		# (openciv4's own option, on the Game tab above the language)
+		if str(parent) == 'GamePanelCenter' and str(name) == 'LangHBox':
+			self.attachCheckBox(parent, WASD_PAN_CHECKBOX, u'Pan the map with W A S D (Ctrl+Shift+W)', 'oc4options', 'handleWasdPanClicked',
+				WASD_PAN_CHECKBOX, _wasdPanOn())
+			self.setToolTip(WASD_PAN_CHECKBOX, u'Holding W, A, S or D on its own moves the map, as the arrows do. Their own hotkeys '
+				u'(S Sentry, A Automate, W next unit, D destroy) then need the unit\'s buttons; with Shift, Ctrl or Alt they are the '
+				u'game\'s as ever, and in menus and screens they are letters.')
+		self._node('hbox', parent, name)
 	def attachPanel(self, parent, name): self._node('panel', parent, name)
 	def attachScrollPanel(self, parent, name): self._node('vbox', parent, name)
 	def attachSpacer(self, parent): self._node('spacer', parent, '')

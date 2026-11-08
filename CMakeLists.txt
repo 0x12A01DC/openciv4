@@ -341,6 +341,12 @@ target_link_libraries(key_nav_test PRIVATE oc4_options)
 add_test(NAME key_nav COMMAND key_nav_test)
 set_target_properties(key_nav_test PROPERTIES FOLDER "tests")
 
+add_executable(wasd_pan_test tests/wasd_pan_test.cpp)
+target_include_directories(wasd_pan_test PRIVATE src)
+target_link_libraries(wasd_pan_test PRIVATE oc4_options)
+add_test(NAME wasd_pan COMMAND wasd_pan_test)
+set_target_properties(wasd_pan_test PROPERTIES FOLDER "tests")
+
 add_executable(globe_bend_test tests/globe_bend_test.cpp)
 target_include_directories(globe_bend_test PRIVATE src)
 target_link_libraries(globe_bend_test PRIVATE oc4_options)

@@ -2,6 +2,7 @@
 #include "render/FrameStats.h"
 #include "render/GlobeBend.h"
 #include "render/UiScale.h"
+#include "render/WasdPan.h"
 
 #include "render/Leaderhead.h"
 #include "render/ModelView.h"
@@ -19,6 +20,7 @@
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
+#include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_video.h>
 
@@ -124,6 +126,9 @@ namespace oc4::render
 		int uiPercent = 0; // (0: the window's density)
 		bool showFrameRate = false; // (Ctrl+Shift+F)
 		bool uiTakesKeys = false;   // a menu or a screen over the map has the arrows
+		bool wasdPan = false;       // W A S D pan the map too (Ctrl+Shift+W, WasdPan.h)
+		std::optional<bool> wasdToggled; // (Ctrl+Shift+W since asked: the profile's to keep)
+		std::chrono::steady_clock::time_point wasdNoteUntil{}; // (the toggle's note shown till then)
 		FrameStats frameStats;
 		std::chrono::steady_clock::time_point lastFrame{};
 		bool panning = false, orbiting = false, minimapDrag = false;
@@ -380,7 +385,17 @@ namespace oc4::render
 				showFrameRate = !showFrameRate;
 				return;
 			}
+			if (wasdToggle(k, shift, ctrl, alt))
+			{
+				wasdPan = !wasdPan;
+				wasdToggled = wasdPan;
+				wasdNoteUntil = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+				return;
+			}
 			if (uiTakesKeys && !ctrl && !alt && uiKey(k, shift))
+				return;
+			// (W A S D panning: the press is the map's, not the game's hotkey)
+			if (wasdPans(k, wasdState()))
 				return;
 			// Playing, the game takes the keys (its hotkeys, Esc too: Ctrl+S saves, Ctrl+B bares the
 			// map, Home goes to the next city); the view's own toggles are on Ctrl with the letters
@@ -558,6 +573,12 @@ namespace oc4::render
 			updatePitch();
 		}
 
+		WasdState wasdState() const
+		{
+			const auto [shift, ctrl, alt] = heldModifiers();
+			return { wasdPan, popup.active() || uiTakesKeys, shift, ctrl, alt, (SDL_GetModState() & SDL_KMOD_GUI) != 0 };
+		}
+
 		void handleHeldKeys(float dt)
 		{
 			if (!window || SDL_GetKeyboardFocus() != window)
@@ -576,6 +597,18 @@ namespace oc4::render
 				move += right;
 			if (arrows && held(key::Left))
 				move += right * -1;
+			// W A S D as the arrows, when the option is on (and the letter alone).
+			if (const WasdState wasd = wasdState(); wasdPans('W', wasd))
+			{
+				if (held('W'))
+					move += forward;
+				if (held('S'))
+					move += forward * -1;
+				if (held('D'))
+					move += right;
+				if (held('A'))
+					move += right * -1;
+			}
 			// The mouse at the window's edge scrolls the map that way, as the original's does.
 			if (float fx = 0, fy = 0; edgeScroll && !popup.active() && SDL_GetMouseFocus() == window)
 			{
@@ -789,6 +822,8 @@ namespace oc4::render
 			popup.draw(*overlay, busy ? std::function<std::string(int)>{} : popupHelp);
 			if (showFrameRate)
 				drawFrameRate();
+			if (std::chrono::steady_clock::now() < wasdNoteUntil)
+				drawWasdNote();
 			overlay->end();
 		}
 
@@ -798,6 +833,15 @@ namespace oc4::render
 			const std::wstring text = frameStats.ready() ?
 				std::format(L"{} FPS, worst {} ms", std::lround(frameStats.fps()), std::lround(frameStats.worstMs())) : std::wstring(L"Measuring...");
 			const float size = 13, x = 8, y = 76, width = overlay->width(text, size, true);
+			overlay->rect(x, y, x + width + 14, y + 23, { 0.03f, 0.04f, 0.06f }, 0.75f, 4);
+			overlay->text(text, x + 7, y + 4, size, { 1, 1, 1 }, 1, true);
+		}
+
+		// Ctrl+Shift+W's answer, at the top in the middle for a moment.
+		void drawWasdNote()
+		{
+			const std::wstring text = wasdPan ? L"W A S D pan the map (Ctrl+Shift+W: off)" : L"W A S D are the game's hotkeys again (Ctrl+Shift+W: pan)";
+			const float size = 13, width = overlay->width(text, size, true), x = (overlay->screenWidth() - width) / 2 - 7, y = 76;
 			overlay->rect(x, y, x + width + 14, y + 23, { 0.03f, 0.04f, 0.06f }, 0.75f, 4);
 			overlay->text(text, x + 7, y + 4, size, { 1, 1, 1 }, 1, true);
 		}
@@ -1628,6 +1672,9 @@ namespace oc4::render
 	}
 	void MapWindow::setFrameRateShown(bool shown) { m->showFrameRate = shown; }
 	void MapWindow::setUiTakesKeys(bool takes) { m->uiTakesKeys = takes; }
+	void MapWindow::setWasdPan(bool on) { m->wasdPan = on; }
+	bool MapWindow::wasdPan() const { return m->wasdPan; }
+	std::optional<bool> MapWindow::takeWasdPanToggle() { return std::exchange(m->wasdToggled, std::nullopt); }
 	void MapWindow::pressKey(unsigned key) { m->onKey(key); }
 	MapWindow::UiDisplay MapWindow::uiDisplay() const { return { m->renderer->width(), m->renderer->height(), m->windowDensity() }; }
 	bool MapWindow::uiActive() const { return m->ui.active(); }

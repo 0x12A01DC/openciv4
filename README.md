@@ -150,6 +150,15 @@ map, and Return or Space uses the one chosen (a ring marks it; moving the mouse 
 Ctrl+Shift+F shows the frame rate and the longest frame of the last half second (`--show-fps`
 from the start).
 
+W A S D can pan the map as the arrows do, an option that is off by default: Ctrl+Shift+W turns it
+on and off (a note at the top says which), and so does "Pan the map with W A S D" on the options'
+Game tab; it is kept in profile.ini as `wasdPan`, and `--wasd-pan` turns it on for one run. Only
+the letters pressed alone pan, so while it is on their own hotkeys (S Sentry, A Automate, W the
+next unit, D destroy) need the unit's buttons; with Shift, Ctrl or Alt they are still the game's
+(Ctrl+S saves, Shift+D is diplomacy), and with a menu, a popup or a screen up they are letters
+there. The arrows are unchanged. The routing is `src/render/WasdPan.h`, tested by
+`tests/wasd_pan_test.cpp`.
+
 The globe view's colour layers (Culture, Trade, Religion) are drawn on the globe itself.
 
 Tools for the game's files, in `build\Release\bin`:
