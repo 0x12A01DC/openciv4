@@ -311,7 +311,7 @@ if(NOT MSVC)
 	target_compile_options(oc4core PRIVATE -fms-extensions -ferror-limit=0 -Wno-everything -ffp-contract=off)
 endif()
 if(MSVC)
-	target_compile_options(oc4core PRIVATE /permissive /Zc:forScope- /W3 /EHsc /MP /source-charset:windows-1252 /execution-charset:windows-1252
+	target_compile_options(oc4core PRIVATE /permissive /W3 /EHsc /MP /source-charset:windows-1252 /execution-charset:windows-1252
 		/wd4244 /wd4267 /wd4996 /wd4251 /wd4018 /wd4800)
 endif()
 if(WIN32)
