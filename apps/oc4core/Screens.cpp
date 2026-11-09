@@ -818,6 +818,7 @@ if _walls:
 					m_laidOut = m_seenSize;
 					screens.attr("setResolution")(width, height);
 					py::module_::import("oc4menu").attr("relayout")();
+					py::module_::import("oc4options").attr("resized")();
 				}
 				const auto [mouseX, mouseY] = window.mousePosition();
 				screens.attr("setMouse")(std::max(mouseX, 0), std::max(mouseY, 0));
@@ -851,6 +852,7 @@ if _walls:
 				screens.attr("reset")(m_mainId);
 				screens.attr("setResolution")(width, height);
 				py::module_::import("CvScreensInterface").attr("showMainInterface")();
+				py::module_::import("oc4options").attr("resized")();
 				m_utility.gameInterface().makeInterfaceDirty();
 			}
 			screens.attr("setResolution")(m_laidOut.first, m_laidOut.second);

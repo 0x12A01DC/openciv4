@@ -47,12 +47,47 @@ namespace oc4::host
 
 	// ------------------------------------------------------------ strings
 
+	unsigned int MemoryStream::writeUtf16(const wchar* s, size_t length)
+	{
+		std::u16string units;
+		units.reserve(length);
+		for (size_t i = 0; i < length; ++i)
+		{
+			const uint32_t c = static_cast<uint32_t>(s[i]);
+			if (sizeof(wchar) == 4 && c >= 0x10000)
+			{
+				units.push_back(char16_t(0xD800 + ((c - 0x10000) >> 10)));
+				units.push_back(char16_t(0xDC00 + ((c - 0x10000) & 0x3FF)));
+			}
+			else
+				units.push_back(char16_t(c));
+		}
+		Write(int(units.size()));
+		put(units.data(), int(units.size()));
+		return unsigned(units.size());
+	}
+
+	std::wstring MemoryStream::readUtf16()
+	{
+		const int n = readLength();
+		std::u16string units(size_t(n), u'\0');
+		get(units.data(), n);
+		std::wstring text;
+		text.reserve(units.size());
+		for (size_t i = 0; i < units.size(); ++i)
+		{
+			const char16_t c = units[i];
+			if (sizeof(wchar) == 4 && c >= 0xD800 && c < 0xDC00 && i + 1 < units.size() && units[i + 1] >= 0xDC00 && units[i + 1] < 0xE000)
+				text.push_back(wchar(0x10000 + ((uint32_t(c) - 0xD800) << 10) + (uint32_t(units[++i]) - 0xDC00)));
+			else
+				text.push_back(wchar(c));
+		}
+		return text;
+	}
+
 	unsigned int MemoryStream::WriteString(const wchar* szName)
 	{
-		const int n = szName ? int(std::wcslen(szName)) : 0;
-		Write(n);
-		put(szName, n);
-		return unsigned(n);
+		return writeUtf16(szName, szName ? std::wcslen(szName) : 0);
 	}
 
 	unsigned int MemoryStream::WriteString(const char* szName)
@@ -72,9 +107,7 @@ namespace oc4::host
 
 	unsigned int MemoryStream::WriteString(const std::wstring& szName)
 	{
-		Write(int(szName.size()));
-		put(szName.data(), int(szName.size()));
-		return unsigned(szName.size());
+		return writeUtf16(szName.data(), szName.size());
 	}
 
 	unsigned int MemoryStream::WriteString(int count, std::string values[])
@@ -103,10 +136,10 @@ namespace oc4::host
 
 	unsigned int MemoryStream::ReadString(wchar* szName)
 	{
-		const int n = readLength();
-		get(szName, n);
-		szName[n] = 0;
-		return unsigned(n);
+		const std::wstring text = readUtf16();
+		std::copy(text.begin(), text.end(), szName);
+		szName[text.size()] = 0;
+		return unsigned(text.size());
 	}
 
 	unsigned int MemoryStream::ReadString(std::string& szName)
@@ -119,10 +152,8 @@ namespace oc4::host
 
 	unsigned int MemoryStream::ReadString(std::wstring& szName)
 	{
-		const int n = readLength();
-		szName.resize(size_t(n));
-		get(szName.data(), n);
-		return unsigned(n);
+		szName = readUtf16();
+		return unsigned(szName.size());
 	}
 
 	unsigned int MemoryStream::ReadString(int count, std::string values[])
@@ -154,10 +185,10 @@ namespace oc4::host
 
 	wchar* MemoryStream::ReadWideString()
 	{
-		const int n = readLength();
-		auto* s = static_cast<wchar*>(std::malloc((size_t(n) + 1) * sizeof(wchar)));
-		get(s, n);
-		s[n] = 0;
+		const std::wstring text = readUtf16();
+		auto* s = static_cast<wchar*>(std::malloc((text.size() + 1) * sizeof(wchar)));
+		std::copy(text.begin(), text.end(), s);
+		s[text.size()] = 0;
 		return s;
 	}
 }

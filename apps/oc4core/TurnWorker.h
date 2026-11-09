@@ -35,7 +35,11 @@ namespace oc4::host
 		bool finishWithin(std::chrono::milliseconds wait);
 
 	private:
+#ifdef _WIN32
 		static unsigned long __stdcall entry(void* self);
+#else
+		static void* entry(void* self);
+#endif
 		void loop();
 
 		void* m_thread = nullptr;

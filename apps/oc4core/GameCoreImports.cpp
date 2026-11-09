@@ -1,5 +1,32 @@
 #include "GameCoreImports.h"
 
+#ifndef _WIN32
+
+#include <cstdio>
+#include <dlfcn.h>
+#include <stdexcept>
+
+// The game core is linked directly here: the host calls it by its symbols, and it answers the few
+// Windows questions it asks through the compatibility layer in gamecore/compat/posix.
+void DLLPublishToPython();
+
+namespace oc4::host
+{
+	std::filesystem::path loadGameCore(const std::optional<std::filesystem::path>& modAssets)
+	{
+		if (modAssets)
+			std::fprintf(stderr, "[oc4core] a mod's own game core is not loaded on this platform yet: running the vanilla one\n");
+		Dl_info info{};
+		if (!dladdr(reinterpret_cast<const void*>(&DLLPublishToPython), &info) || !info.dli_fname)
+			throw std::runtime_error("cannot locate the game core");
+		return info.dli_fname;
+	}
+
+	void setGameCoreModulePaths(const std::filesystem::path&, const std::filesystem::path&) {}
+}
+
+#else
+
 #include <windows.h>
 #include <delayimp.h>
 
@@ -198,3 +225,5 @@ namespace oc4::host
 }
 
 extern "C" const PfnDliHook __pfnDliNotifyHook2 = oc4::host::delayLoadHook;
+
+#endif

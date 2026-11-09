@@ -87,6 +87,35 @@ Mods' game cores ported to x64 are built along when their sources are there
 Profile-guided optimisation of the game core (optional, about 20 minutes, needs the game):
 `tools\pgo.cmd "<Civ4>"`, another 5-10% off late-game turns with identical game results.
 
+## Building (macOS, Apple Silicon)
+
+A native arm64 build (no Rosetta or Wine): the same engine and game core, built by Apple clang,
+rendering through SDL3's Metal backend. Xcode or the Command Line Tools, and from Homebrew
+`cmake ninja pyenv`, plus `ffmpeg` for movies (optional).
+
+* Python 2.7.18 as a shared library (there is no Homebrew formula):
+  `PYTHON_CONFIGURE_OPTS=--enable-shared pyenv install 2.7.18`.
+* Under `external/`, as on Windows: pybind11 2.9.2, zlib 1.3.1, SDL3 3.4.18 (source), dr_libs,
+  FreeType 2.13.3 (the text off Windows: required here), and DirectXMath (microsoft/DirectXMath,
+  header only; part of the Windows SDK on Windows) in `DirectXMath`.
+
+```sh
+cmake -S . -B build/macos -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DOC4_PYTHON27_DIR=$HOME/.pyenv/versions/2.7.18 -DOC4_FFMPEG_DIR=$(brew --prefix ffmpeg)
+cmake --build build/macos
+ctest --test-dir build/macos
+build/macos/bin/oc4core --civ4 "<Civ4>" --menu
+```
+
+`<Civ4>` is a Beyond the Sword install's root (copied from a Windows install or the GOG
+or Steam download). Saves and settings go to `~/Documents/My Games` as on Windows
+(`OC4_DOCUMENTS=<folder>` puts them elsewhere). The shaders' Metal versions are generated from
+the HLSL and checked in (`src/render/MslShaders.inc`); after changing a shader, run
+`python3 tools/shaders/gen_msl.py` (needs `glslang` and `spirv-cross` from Homebrew).
+
+The macOS game core plays the same games as the Windows x64 one: AI games from the same seed
+give the same sync checksums turn by turn.
+
 ## Command line
 
 `<Civ4>` is the install folder with `Assets`, `Warlords` and `Beyond the Sword`; without

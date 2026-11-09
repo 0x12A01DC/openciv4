@@ -1,4 +1,5 @@
 #include "render/MapWindow.h"
+#include "render/GlobeBend.h"
 
 #include "render/Leaderhead.h"
 #include "render/ModelView.h"
@@ -691,11 +692,8 @@ namespace oc4::render
 		// The map, the cities' banners and the status lines.
 		void render()
 		{
-			// (the globe view: the map round a sphere under the point looked at, once round its width)
-			if (const Vec3 size = view->worldSize(); globeView && size.x > 0)
-				renderer->setGlobe(camera.target.x, camera.target.y, size.x / (2 * 3.14159265f), view->map().wrapX ? size.x : 0);
-			else
-				renderer->setGlobe(0, 0, 0, 0);
+			const GlobeShape g = globeShape();
+			renderer->setGlobe(g.x, g.y, g.radius, g.wrapWidth);
 			renderer->beginFrame(camera, { 0.05f, 0.07f, 0.10f });
 			view->draw();
 			renderer->endFrame();
@@ -742,17 +740,33 @@ namespace oc4::render
 			overlay->end();
 		}
 
+		// The globe view: the map round a sphere under the point looked at, once round its width
+		// (radius 0: the flat map).
+		GlobeShape globeShape() const
+		{
+			if (const Vec3 size = view->worldSize(); globeView && size.x > 0)
+				return { camera.target.x, camera.target.y, size.x / (2 * 3.14159265f), view->map().wrapX ? size.x : 0 };
+			return {};
+		}
+
 		// A point of the map's ground on the screen (the copy nearest the camera on a wrapping
-		// map); false behind the camera.
+		// map, or where the globe bends it); false behind the camera or round the globe's far side.
 		bool groundToScreen(float wx, float wy, float lift, float& sx, float& sy) const
 		{
-			if (globeView)
-				return false; // (the flat map's places: not where the globe shows them)
-			if (const Vec3 size = view->worldSize(); view->map().wrapX && size.x > 0)
+			const GlobeShape g = globeShape();
+			if (const Vec3 size = view->worldSize(); g.radius <= 0 && view->map().wrapX && size.x > 0)
 				while (std::abs(wx - camera.target.x) > size.x / 2)
 					wx += wx < camera.target.x ? size.x : -size.x;
+			GlobePoint p{ wx, wy, view->groundHeight(wx, wy) + lift };
+			if (g.radius > 0)
+			{
+				p = globeBend(g, p);
+				const Vec3 eye = camera.eye();
+				if (!globeFacing(g, p, { eye.x, eye.y, eye.z }))
+					return false;
+			}
 			XMFLOAT4 c;
-			XMStoreFloat4(&c, XMVector4Transform(XMVectorSet(wx, wy, view->groundHeight(wx, wy) + lift, 1), viewProjection()));
+			XMStoreFloat4(&c, XMVector4Transform(XMVectorSet(p.x, p.y, p.z, 1), viewProjection()));
 			if (c.w <= 0)
 				return false;
 			sx = (c.x / c.w * 0.5f + 0.5f) * float(renderer->width());

@@ -8,7 +8,9 @@
 #include <thread>
 
 #ifdef OC4_HAVE_FFMPEG
+#ifdef _WIN32
 #include <windows.h>
+#endif
 extern "C"
 {
 #include <libavcodec/avcodec.h>
@@ -22,8 +24,12 @@ namespace oc4::media
 	{
 #ifdef OC4_HAVE_FFMPEG
 		// (the libraries are delay-loaded: nothing of theirs is called unless all three are there)
+		#ifdef _WIN32
 		static const bool found = LoadLibraryW(L"avutil-60.dll") && LoadLibraryW(L"avcodec-62.dll") && LoadLibraryW(L"avformat-62.dll");
 		return found;
+#else
+		return true; // linked directly
+#endif
 #else
 		return false;
 #endif

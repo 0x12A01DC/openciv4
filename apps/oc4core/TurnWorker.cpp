@@ -5,6 +5,9 @@
 #include <windows.h>
 
 #include <float.h>
+#ifndef _WIN32
+#include <pthread.h>
+#endif
 
 namespace oc4::host
 {
@@ -15,7 +18,17 @@ namespace oc4::host
 		if (GetEnvironmentVariableA("OC4_SAME_THREAD", value, sizeof(value)) > 0)
 			return;
 		// (the AI's path finding and recursion want room: as much stack as the window's thread has, and more)
+#ifdef _WIN32
 		m_thread = CreateThread(nullptr, 64u << 20, entry, this, STACK_SIZE_PARAM_IS_A_RESERVATION, nullptr);
+#else
+		pthread_attr_t attributes;
+		pthread_attr_init(&attributes);
+		pthread_attr_setstacksize(&attributes, 64u << 20);
+		pthread_t thread{};
+		if (pthread_create(&thread, &attributes, entry, this) == 0)
+			m_thread = reinterpret_cast<void*>(thread);
+		pthread_attr_destroy(&attributes);
+#endif
 	}
 
 	TurnWorker::~TurnWorker()
@@ -33,8 +46,12 @@ namespace oc4::host
 		m_wake.notify_all();
 		if (m_thread)
 		{
+#ifdef _WIN32
 			WaitForSingleObject(m_thread, INFINITE);
 			CloseHandle(m_thread);
+#else
+			pthread_join(reinterpret_cast<pthread_t>(m_thread), nullptr);
+#endif
 		}
 	}
 
@@ -86,11 +103,19 @@ namespace oc4::host
 		return finish();
 	}
 
+#ifdef _WIN32
 	unsigned long __stdcall TurnWorker::entry(void* self)
 	{
 		static_cast<TurnWorker*>(self)->loop();
 		return 0;
 	}
+#else
+	void* TurnWorker::entry(void* self)
+	{
+		static_cast<TurnWorker*>(self)->loop();
+		return nullptr;
+	}
+#endif
 
 	void TurnWorker::loop()
 	{

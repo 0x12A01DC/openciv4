@@ -659,6 +659,26 @@ namespace oc4::render
 			return (pictures[key] = std::move(p)).get();
 		}
 
+		// The bitmap added to what is under it (the Add combine: a button's rollover glow, black
+		// where it adds nothing): its colours kept and its alpha cleared, which the overlay's
+		// premultiplied blending (one, one less the alpha) then adds.
+		Bitmap additive(const Bitmap& b)
+		{
+			if (!b)
+				return b;
+			auto& slot = pictures["|add|" + std::to_string(b.picture->key)]; // (by its own key: a tinted one is another picture)
+			if (!slot)
+			{
+				slot = std::make_unique<Picture>(*b.picture);
+				for (size_t i = 3; i < slot->bgra.size(); i += 4)
+					slot->bgra[i] = 0;
+				slot->key = (uint64_t(0x7E) << 56) | ++nextKey;
+			}
+			Bitmap out = b;
+			out.picture = slot.get();
+			return out;
+		}
+
 		Bitmap bitmap(const Style* s, const Value* v, const Color* tint = nullptr, float tintAlpha = 1)
 		{
 			v = resolve(s, v);
@@ -709,6 +729,12 @@ namespace oc4::render
 				l.image = bitmap(s, v, tinted ? &tint : nullptr, tintAlpha);
 			if (const Value* v = has("Center"))
 				l.center = bitmap(s, v, tinted ? &tint : nullptr, tintAlpha);
+			if (const Value* combine = resolve(s, has("DestCombine"));
+				combine && combine->kind == Value::Kind::Call && !combine->args.empty() && combine->args[0].text == "Add")
+			{
+				l.image = additive(l.image);
+				l.center = additive(l.center);
+			}
 			if (const Value* v = has("Margin"))
 				margins(s, v, l.margin);
 			if (const Value* v = has("Indent"))

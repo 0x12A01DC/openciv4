@@ -40,10 +40,16 @@ namespace oc4::host
 		// CPU time of the calling thread: steadier than wall time on a busy machine.
 		double threadCpuSeconds()
 		{
+#ifdef _WIN32
 			FILETIME created, exited, kernel, user;
 			GetThreadTimes(GetCurrentThread(), &created, &exited, &kernel, &user);
 			const auto ticks = [](FILETIME t) { return (ULONGLONG(t.dwHighDateTime) << 32) | t.dwLowDateTime; };
 			return double(ticks(kernel) + ticks(user)) * 1e-7;
+#else
+			timespec t{};
+			clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t);
+			return double(t.tv_sec) + double(t.tv_nsec) * 1e-9;
+#endif
 		}
 
 		CvPlayerAI& player(int i) { return CvPlayerAI::getPlayerNonInl(static_cast<PlayerTypes>(i)); }
