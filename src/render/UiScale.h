@@ -19,7 +19,8 @@ namespace oc4::render
 	inline float uiScaleFor(int percent, float density, uint32_t width, uint32_t height)
 	{
 		const float wanted = percent > 0 ? float(percent) / 100 : density;
-		const float scale = std::min({ wanted, float(width) / kUiMinWidth, float(height) / kUiMinHeight });
+		// (not std::min({...}): MSVC's vectorized one drops a NaN)
+		const float scale = std::min(std::min(wanted, float(width) / kUiMinWidth), float(height) / kUiMinHeight);
 		return scale > 1 ? scale : 1; // (not std::max: a density of NaN is 1 too)
 	}
 
