@@ -8,6 +8,7 @@
 #include "core/FileUtil.h"
 #include "media/Movie.h"
 #include "render/Input.h"
+#include "render/UiScale.h"
 
 #include "CvGameCoreDLL.h"
 #include "CvCity.h"
@@ -124,6 +125,7 @@ namespace oc4::host
 
 		std::wstring g_help; // the help shown now (CyInterface.getHelpString)
 		std::function<int(const std::string&, int)> g_textWidth; // how wide a text is in the window
+		render::MapWindow::UiDisplay g_display; // the window's, for the scale's choices
 		std::function<int(const std::string&, int, int)> g_textHeight; // how high it is, wrapped at a width
 
 		// (before the window is up: its markup left out, a symbol about two letters wide)
@@ -256,6 +258,15 @@ namespace oc4::host
 		// (the graphic options it has: the game core and the window ask the utility)
 		host.def("set_graphic_option", [&utility](int option, bool on) { utility.setGraphicOption(option, on); });
 		host.def("reset_graphic_options", [&utility] { utility.resetGraphicOptions(); });
+		host.def("set_ui_scale", [&utility](int percent) { utility.setUiScale(percent); });
+		// W A S D panning: the profile's, as loaded; the player's, from the options' check box.
+		host.def("set_wasd_pan", [&utility](bool on) { utility.setWasdPan(on); });
+		host.def("choose_wasd_pan", [&utility](bool on) { utility.chooseWasdPan(on); });
+		host.def("wasd_pan", [&utility] { return utility.wasdPan(); });
+		host.def("ui_size_at", [](int percent) {
+			const float scale = render::uiScaleFor(percent, g_display.density, g_display.width, g_display.height);
+			return std::pair{ render::uiUnits(g_display.width, scale), render::uiUnits(g_display.height, scale) };
+		});
 		// The globe view's layers (oc4screens' CyGlobeLayerManager): the game core's, the one
 		// shown and its option, chosen.
 		host.def("globe_up", [&engine] { return bool(engine.globeUp); });
@@ -796,8 +807,55 @@ if _walls:
 		m_version = -1;
 	}
 
+	bool Screens::menuUp()
+	{
+		if (!m_active)
+			return false;
+		if (m_menu || m_utility.diplomacy().active())
+			return true;
+		try
+		{
+			return py::module_::import("oc4screens").attr("modalUp")().cast<bool>();
+		}
+		catch (py::error_already_set& e)
+		{
+			printPythonError(e);
+			return false;
+		}
+	}
+
 	void Screens::frame(render::MapWindow& window, int width, int height)
 	{
+		// (a new scale: the next frame's size, which lays the screens out again)
+		window.setUiScale(m_utility.uiScale());
+		// (Ctrl+Shift+W in the window: the player's choice, kept in the profile)
+		if (const auto toggled = window.takeWasdPanToggle())
+		{
+			m_utility.chooseWasdPan(*toggled);
+			try
+			{
+				py::module_::import("oc4options").attr("setWasdPan")(*toggled);
+			}
+			catch (py::error_already_set& e)
+			{
+				printPythonError(e);
+			}
+		}
+		window.setWasdPan(m_utility.wasdPan());
+		g_display = window.uiDisplay();
+		window.setUiTakesKeys(menuUp(), !m_menu);
+		// (new answers in a talk: the keyboard's choice was among the old ones, and Return is the
+		// talk's own again)
+		{
+			std::vector<std::pair<int, std::wstring>> answers;
+			for (const Diplomacy::Comment& c : m_utility.diplomacy().userComments())
+				answers.emplace_back(c.comment, c.text);
+			if (answers != m_talkAnswers)
+			{
+				window.clearKeyChoice();
+				m_talkAnswers = std::move(answers);
+			}
+		}
 		if (!m_active)
 			return;
 		if (m_menu)
@@ -1120,6 +1178,7 @@ if _walls:
 			const bool buttonLike = item.kind == Kind::ImageButton || item.kind == Kind::Button || item.kind == Kind::CheckBox ||
 				item.kind == Kind::Dropdown || item.kind == Kind::EndTurnButton || item.kind == Kind::Cell || item.kind == Kind::Scrollbar;
 			// (a text, setText, is clicked as a button is: the scripts' "EXIT"s are texts)
+			item.mainInterface = !m_menu && info.screen == m_mainId;
 			item.interactive = hitTest != HITTEST_NOHIT && (buttonLike || item.kind == Kind::Text || item.kind == Kind::Movie || (info.widget >= 0 && info.widget != WIDGET_GENERAL) ||
 				(item.kind == Kind::Header && info.part <= -100)); // (a sorting table's header)
 			item.blocks = (info.screen != m_mainId && (item.kind == Kind::Panel || item.kind == Kind::Image || item.kind == Kind::Graphic || item.kind == Kind::Leaderhead ||

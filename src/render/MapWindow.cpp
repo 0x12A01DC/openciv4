@@ -1,5 +1,8 @@
 #include "render/MapWindow.h"
+#include "render/FrameStats.h"
 #include "render/GlobeBend.h"
+#include "render/UiScale.h"
+#include "render/WasdPan.h"
 
 #include "render/Leaderhead.h"
 #include "render/ModelView.h"
@@ -17,6 +20,7 @@
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
+#include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_video.h>
 
@@ -79,6 +83,7 @@ namespace oc4::render
 			renderer = std::make_unique<Renderer>(window, width, height);
 			view = std::make_unique<MapView>(*renderer, assets);
 			overlay = std::make_unique<Overlay>(*renderer);
+			updateUiScale();
 			overlay->setArt(&art);
 			// The game's interface theme: the screens' and the popups' look, the text's face.
 			if (theme.load(assets.layerRoots()))
@@ -117,7 +122,16 @@ namespace oc4::render
 		float tilt = 0; // the user's change of the zoom-dependent pitch
 		bool open = true, running = false, turnRequest = false, framed = false;
 		std::string status, title;
-		int mouseX = -1, mouseY = -1;
+		int mouseX = -1, mouseY = -1; // (in the interface's units, as the screens are)
+		int uiPercent = 0; // (0: the window's density)
+		bool showFrameRate = false; // (Ctrl+Shift+F)
+		bool uiTakesKeys = false;   // a menu or a screen over the map has the arrows (after Tab)
+		bool uiMapBehind = true;    // (no map behind it, the main menu: the arrows are its at once)
+		bool wasdPan = false;       // W A S D pan the map too (Ctrl+Shift+W, WasdPan.h)
+		std::optional<bool> wasdToggled; // (Ctrl+Shift+W since asked: the profile's to keep)
+		std::chrono::steady_clock::time_point wasdNoteUntil{}; // (the toggle's note shown till then)
+		FrameStats frameStats;
+		std::chrono::steady_clock::time_point lastFrame{};
 		bool panning = false, orbiting = false, minimapDrag = false;
 		bool playing = false;
 		std::filesystem::path screenshotFolder;
@@ -231,7 +245,7 @@ namespace oc4::render
 		std::optional<Vec3> groundAt(int x, int y, float z = 0) const
 		{
 			const XMMATRIX inv = XMMatrixInverse(nullptr, viewProjection());
-			const float nx = 2.0f * (float(x) + 0.5f) / float(renderer->width()) - 1, ny = 1 - 2.0f * (float(y) + 0.5f) / float(renderer->height());
+			const float nx = 2.0f * (float(x) + 0.5f) / overlay->screenWidth() - 1, ny = 1 - 2.0f * (float(y) + 0.5f) / overlay->screenHeight();
 			const auto unproject = [&](float d) {
 				XMFLOAT4 p;
 				XMStoreFloat4(&p, XMVector4Transform(XMVectorSet(nx, ny, d, 1), inv));
@@ -301,7 +315,7 @@ namespace oc4::render
 			if (view->empty())
 				return std::nullopt;
 			const XMMATRIX inv = XMMatrixInverse(nullptr, viewProjection());
-			const float nx = 2.0f * (float(x) + 0.5f) / float(renderer->width()) - 1, ny = 1 - 2.0f * (float(y) + 0.5f) / float(renderer->height());
+			const float nx = 2.0f * (float(x) + 0.5f) / overlay->screenWidth() - 1, ny = 1 - 2.0f * (float(y) + 0.5f) / overlay->screenHeight();
 			const auto unproject = [&](float d) {
 				XMFLOAT4 p;
 				XMStoreFloat4(&p, XMVector4Transform(XMVectorSet(nx, ny, d, 1), inv));
@@ -322,6 +336,54 @@ namespace oc4::render
 			return { -1, -1 };
 		}
 
+		static bool isArrow(unsigned k) { return k == key::Up || k == key::Down || k == key::Left || k == key::Right; }
+
+		// The keyboard is choosing in a menu or a screen: Tab started it, or there is no map behind
+		// to pan (the main menu). Moving the mouse, or the screen going, ends it.
+		bool uiKeysChoose() const { return uiTakesKeys && (!uiMapBehind || ui.keyChoice()); }
+
+		// A menu's or a screen's keys: Tab starts choosing, then the arrows choose and Return and
+		// Space use what was chosen. Before that the arrows pan the map, as the original's do.
+		bool uiKey(unsigned k, bool shift)
+		{
+			if (k == key::Tab)
+			{
+				const NavDirection d = shift ? NavDirection::Up : NavDirection::Down;
+				if (!ui.moveChoice(d, false))
+					ui.moveChoice(d, true);
+				return true;
+			}
+			if (isArrow(k) && !uiKeysChoose())
+				return false;
+			if (k == key::Return || k == key::Space)
+			{
+				if (!ui.keyChoice())
+					return false;
+				uiClicks.push_back({ ui.useKeyChoice(), false, shift, false, false });
+				return true;
+			}
+			const auto direction = [&]() -> std::optional<NavDirection> {
+				switch (k)
+				{
+				case key::Up: return NavDirection::Up;
+				case key::Down: return NavDirection::Down;
+				case key::Left: return NavDirection::Left;
+				case key::Right: return NavDirection::Right;
+				default: return std::nullopt;
+				}
+			}();
+			if (!direction)
+				return false;
+			if (ui.moveChoice(*direction, false))
+				return true;
+			// Nothing further that way: a list may have more to scroll to; else round to the far side.
+			const bool vertical = *direction == NavDirection::Up || *direction == NavDirection::Down;
+			const auto [x, y] = ui.keyChoicePlace();
+			if (!(vertical && x >= 0 && !busy && uiWheel && uiWheel(x, y, *direction == NavDirection::Up ? 120 : -120)))
+				ui.moveChoice(*direction, true);
+			return true;
+		}
+
 		void onKey(unsigned k)
 		{
 			auto& o = view->options;
@@ -331,9 +393,31 @@ namespace oc4::render
 			{
 				if (k == key::Back)
 					popup.character(L'\b');
-				popup.key(k);
+				// (until Tab starts the keyboard's choice the arrows pan the map under it, as the
+				// original's do: handleHeldKeys)
+				if (isArrow(k) && !popup.keyboardChoice())
+					return;
+				popup.key(k == key::Tab && shift ? key::Up : k);
 				return;
 			}
+			// (the game has no Ctrl+Shift+F, and this works over its screens and popups too)
+			if (ctrl && shift && !alt && k == 'F')
+			{
+				showFrameRate = !showFrameRate;
+				return;
+			}
+			if (wasdToggle(k, shift, ctrl, alt, wasdPan))
+			{
+				wasdPan = !wasdPan;
+				wasdToggled = wasdPan;
+				wasdNoteUntil = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+				return;
+			}
+			if (uiTakesKeys && !ctrl && !alt && uiKey(k, shift))
+				return;
+			// (W A S D panning: the press is the map's, not the game's hotkey)
+			if (wasdPans(k, wasdState()))
+				return;
 			// Playing, the game takes the keys (its hotkeys, Esc too: Ctrl+S saves, Ctrl+B bares the
 			// map, Home goes to the next city); the view's own toggles are on Ctrl with the letters
 			// the game has none for, and Ctrl+Shift+S saves a screenshot.
@@ -510,6 +594,12 @@ namespace oc4::render
 			updatePitch();
 		}
 
+		WasdState wasdState() const
+		{
+			const auto [shift, ctrl, alt] = heldModifiers();
+			return { wasdPan, popup.active() || uiTakesKeys, shift, ctrl, alt, (SDL_GetModState() & SDL_KMOD_GUI) != 0 };
+		}
+
 		void handleHeldKeys(float dt)
 		{
 			if (!window || SDL_GetKeyboardFocus() != window)
@@ -518,14 +608,28 @@ namespace oc4::render
 			const float speed = camera.distance * 0.9f * dt;
 			const Vec3 forward{ -std::cos(camera.yaw), -std::sin(camera.yaw), 0 }, right{ -std::sin(camera.yaw), std::cos(camera.yaw), 0 };
 			Vec3 move{};
-			if (held(key::Up))
+			// (once the keyboard chooses in a menu or a popup, the arrows are its, not the map's)
+			const bool arrows = !(popup.active() && popup.keyboardChoice()) && !uiKeysChoose();
+			if (arrows && held(key::Up))
 				move += forward;
-			if (held(key::Down))
+			if (arrows && held(key::Down))
 				move += forward * -1;
-			if (held(key::Right))
+			if (arrows && held(key::Right))
 				move += right;
-			if (held(key::Left))
+			if (arrows && held(key::Left))
 				move += right * -1;
+			// W A S D as the arrows, when the option is on (and the letter alone).
+			if (const WasdState wasd = wasdState(); wasdPans('W', wasd))
+			{
+				if (held('W'))
+					move += forward;
+				if (held('S'))
+					move += forward * -1;
+				if (held('D'))
+					move += right;
+				if (held('A'))
+					move += right * -1;
+			}
 			// The mouse at the window's edge scrolls the map that way, as the original's does.
 			if (float fx = 0, fy = 0; edgeScroll && !popup.active() && SDL_GetMouseFocus() == window)
 			{
@@ -658,13 +762,13 @@ namespace oc4::render
 			for (const auto& it : ui.items())
 				if (it.kind == UiItem::Kind::Leaderhead)
 					if (const auto at = heads.find(it.texture); at != heads.end() && at->second.head->loaded() && !at->second.bitmap)
-						at->second.bitmap = at->second.head->render(uint32_t(std::max(1.0f, it.x1 - it.x0)), uint32_t(std::max(1.0f, it.y1 - it.y0)));
+						at->second.bitmap = at->second.head->render(uint32_t(std::max(1.0f, (it.x1 - it.x0) * overlay->scale())), uint32_t(std::max(1.0f, (it.y1 - it.y0) * overlay->scale())));
 			for (auto& [key, m] : models)
 				m.bitmap = nullptr;
 			for (const auto& it : ui.items())
 				if (it.kind == UiItem::Kind::Model)
 					if (const auto at = models.find(modelKey(it)); at != models.end() && at->second.view->loaded() && !at->second.bitmap)
-						at->second.bitmap = at->second.view->render(uint32_t(std::max(1.0f, it.x1 - it.x0)), uint32_t(std::max(1.0f, it.y1 - it.y0)));
+						at->second.bitmap = at->second.view->render(uint32_t(std::max(1.0f, (it.x1 - it.x0) * overlay->scale())), uint32_t(std::max(1.0f, (it.y1 - it.y0) * overlay->scale())));
 		}
 
 		bool drawHead(const UiItem& it)
@@ -737,7 +841,30 @@ namespace oc4::render
 			if (!popup.active())
 				drawPlotHelp();
 			popup.draw(*overlay, busy ? std::function<std::string(int)>{} : popupHelp);
+			if (showFrameRate)
+				drawFrameRate();
+			if (std::chrono::steady_clock::now() < wasdNoteUntil)
+				drawWasdNote();
 			overlay->end();
+		}
+
+		// Under the interface's top left corner, over everything.
+		void drawFrameRate()
+		{
+			const std::wstring text = frameStats.ready() ?
+				std::format(L"{} FPS, worst {} ms", std::lround(frameStats.fps()), std::lround(frameStats.worstMs())) : std::wstring(L"Measuring...");
+			const float size = 13, x = 8, y = 76, width = overlay->width(text, size, true);
+			overlay->rect(x, y, x + width + 14, y + 23, { 0.03f, 0.04f, 0.06f }, 0.75f, 4);
+			overlay->text(text, x + 7, y + 4, size, { 1, 1, 1 }, 1, true);
+		}
+
+		// Ctrl+Shift+W's answer, at the top in the middle for a moment.
+		void drawWasdNote()
+		{
+			const std::wstring text = wasdPan ? L"W A S D pan the map (Ctrl+Shift+W: off)" : L"W A S D are the game's hotkeys again (the options' Game tab: pan)";
+			const float size = 13, width = overlay->width(text, size, true), x = (overlay->screenWidth() - width) / 2 - 7, y = 76;
+			overlay->rect(x, y, x + width + 14, y + 23, { 0.03f, 0.04f, 0.06f }, 0.75f, 4);
+			overlay->text(text, x + 7, y + 4, size, { 1, 1, 1 }, 1, true);
 		}
 
 		// The globe view: the map round a sphere under the point looked at, once round its width
@@ -769,8 +896,8 @@ namespace oc4::render
 			XMStoreFloat4(&c, XMVector4Transform(XMVectorSet(p.x, p.y, p.z, 1), viewProjection()));
 			if (c.w <= 0)
 				return false;
-			sx = (c.x / c.w * 0.5f + 0.5f) * float(renderer->width());
-			sy = (0.5f - c.y / c.w * 0.5f) * float(renderer->height());
+			sx = (c.x / c.w * 0.5f + 0.5f) * overlay->screenWidth();
+			sy = (0.5f - c.y / c.w * 0.5f) * overlay->screenHeight();
 			return true;
 		}
 
@@ -869,9 +996,9 @@ namespace oc4::render
 				XMStoreFloat4(&c, XMVector4Transform(XMVectorSet(wx, wy, view->groundHeight(wx, wy) + lift, 1), vp));
 				if (c.w <= 0)
 					return false;
-				sx = (c.x / c.w * 0.5f + 0.5f) * float(renderer->width());
-				sy = (0.5f - c.y / c.w * 0.5f) * float(renderer->height());
-				return sx > -40 && sy > -40 && sx < float(renderer->width()) + 40 && sy < float(renderer->height()) + 40;
+				sx = (c.x / c.w * 0.5f + 0.5f) * overlay->screenWidth();
+				sy = (0.5f - c.y / c.w * 0.5f) * overlay->screenHeight();
+				return sx > -40 && sy > -40 && sx < overlay->screenWidth() + 40 && sy < overlay->screenHeight() + 40;
 			};
 			const float zoom = std::clamp(12 * plot() / camera.distance, 0.6f, 1.4f);
 			for (int y = 0; y < map.height; ++y)
@@ -948,8 +1075,8 @@ namespace oc4::render
 				XMStoreFloat4(&c, XMVector4Transform(XMVectorSet(wx, wy, view->groundHeight(wx, wy) + 2, 1), vp));
 				if (c.w <= 0)
 					return false;
-				sx = (c.x / c.w * 0.5f + 0.5f) * float(renderer->width());
-				sy = (0.5f - c.y / c.w * 0.5f) * float(renderer->height());
+				sx = (c.x / c.w * 0.5f + 0.5f) * overlay->screenWidth();
+				sy = (0.5f - c.y / c.w * 0.5f) * overlay->screenHeight();
 				return true;
 			};
 			const Color way = path.reachable ? Color{ 0.95f, 0.95f, 0.85f } : Color{ 1, 0.3f, 0.25f };
@@ -1181,7 +1308,8 @@ namespace oc4::render
 			// The ground under the screen's corners.
 			const Vec3 size = view->worldSize();
 			const auto toMini = [&](Vec3 p) { return std::pair{ x0 + p.x / size.x * w, y1 - p.y / size.y * h }; };
-			const int sx[4] = { 0, int(renderer->width()) - 1, int(renderer->width()) - 1, 0 }, sy[4] = { 0, 0, int(renderer->height()) - 1, int(renderer->height()) - 1 };
+			const int sw = int(overlay->screenWidth()), sh = int(overlay->screenHeight());
+			const int sx[4] = { 0, sw - 1, sw - 1, 0 }, sy[4] = { 0, 0, sh - 1, sh - 1 };
 			std::pair<float, float> c[4];
 			for (int i = 0; i < 4; ++i)
 			{
@@ -1254,6 +1382,11 @@ namespace oc4::render
 
 		void frame(float dt)
 		{
+			// (the real time: dt is limited for the animations, and a stutter should show)
+			const auto now = std::chrono::steady_clock::now();
+			if (lastFrame != std::chrono::steady_clock::time_point{})
+				frameStats.add(std::chrono::duration<double>(now - lastFrame).count());
+			lastFrame = now;
 			clock += dt;
 			handleHeldKeys(dt);
 			view->update(dt);
@@ -1265,9 +1398,14 @@ namespace oc4::render
 			renderer->present();
 		}
 
+		float windowDensity() const { return window ? SDL_GetWindowPixelDensity(window) : 1; }
+
+		void updateUiScale() { overlay->setScale(uiScaleFor(uiPercent, windowDensity(), renderer->width(), renderer->height())); }
+
 		void onEvent(const SDL_Event& e)
 		{
-			const float density = SDL_GetWindowPixelDensity(window);
+			// (the window's points to the interface's units, which the mouse is in)
+			const float density = SDL_GetWindowPixelDensity(window) / overlay->scale();
 			const auto px = [&](float v) { return int(std::floor(v * density)); };
 			switch (e.type)
 			{
@@ -1305,7 +1443,10 @@ namespace oc4::render
 			case SDL_EVENT_WINDOW_MOUSE_LEAVE: mouseX = -1; break;
 			case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
 				if (e.window.data1 > 0 && e.window.data2 > 0)
+				{
 					renderer->resize(uint32_t(e.window.data1), uint32_t(e.window.data2));
+					updateUiScale();
+				}
 				break;
 			case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
 			case SDL_EVENT_QUIT: open = false; break;
@@ -1541,8 +1682,29 @@ namespace oc4::render
 	void MapWindow::setPopupHelp(std::function<std::string(int item)> help) { m->popupHelp = std::move(help); }
 	void MapWindow::setUiWheel(std::function<bool(int x, int y, int delta)> wheel) { m->uiWheel = std::move(wheel); }
 	void MapWindow::setUi(std::vector<UiItem> items) { m->ui.set(std::move(items)); }
-	uint32_t MapWindow::width() const { return m->renderer->width(); }
-	uint32_t MapWindow::height() const { return m->renderer->height(); }
+	uint32_t MapWindow::width() const { return uint32_t(uiUnits(m->renderer->width(), m->overlay->scale())); }
+	uint32_t MapWindow::height() const { return uint32_t(uiUnits(m->renderer->height(), m->overlay->scale())); }
+	void MapWindow::setUiScale(int percent)
+	{
+		if (percent == m->uiPercent)
+			return;
+		m->uiPercent = percent;
+		m->updateUiScale();
+	}
+	void MapWindow::setFrameRateShown(bool shown) { m->showFrameRate = shown; }
+	void MapWindow::setUiTakesKeys(bool takes, bool mapBehind)
+	{
+		m->uiTakesKeys = takes;
+		m->uiMapBehind = mapBehind;
+		if (!takes)
+			m->ui.clearKeyChoice(); // (the next screen starts with the arrows the map's again)
+	}
+	void MapWindow::clearKeyChoice() { m->ui.clearKeyChoice(); }
+	void MapWindow::setWasdPan(bool on) { m->wasdPan = on; }
+	bool MapWindow::wasdPan() const { return m->wasdPan; }
+	std::optional<bool> MapWindow::takeWasdPanToggle() { return std::exchange(m->wasdToggled, std::nullopt); }
+	void MapWindow::pressKey(unsigned key) { m->onKey(key); }
+	MapWindow::UiDisplay MapWindow::uiDisplay() const { return { m->renderer->width(), m->renderer->height(), m->windowDensity() }; }
 	bool MapWindow::uiActive() const { return m->ui.active(); }
 	std::vector<MapWindow::UiClick> MapWindow::takeUiClicks() { return std::exchange(m->uiClicks, {}); }
 	int MapWindow::uiHovered() const { return m->ui.hovered(); }

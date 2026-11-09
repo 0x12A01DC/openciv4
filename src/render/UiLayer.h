@@ -6,6 +6,7 @@
 // the game's theme has their styles; one it does not know has a plain look of its own.
 
 #include "render/ButtonArt.h"
+#include "render/KeyNav.h"
 #include "render/MapWindow.h"
 #include "render/Overlay.h"
 #include "render/Theme.h"
@@ -39,6 +40,15 @@ namespace oc4::render
 			m_hover = item >= 0 && size_t(item) < m_items.size() ? item : -1;
 			m_mouseX = m_mouseY = -1;
 		}
+		// The keyboard's choice, where the mouse is not: the nearest thing that can be used that
+		// way (round the far side with `wrap`); false if there is nothing. Moving the mouse ends it.
+		bool moveChoice(NavDirection direction, bool wrap);
+		bool keyChoice() const { return m_keyHover && m_hover >= 0; }
+		void clearKeyChoice() { m_keyHover = false; }
+		// What it chose, about to be used: an open pull down's item hands the choice back to its box.
+		int useKeyChoice();
+		// The middle of what the keyboard has chosen.
+		std::pair<int, int> keyChoicePlace() const;
 		// A press and its release on the same item make a click.
 		void press(int x, int y, bool right);
 		std::optional<MapWindow::UiClick> release(int x, int y, bool shift, bool ctrl, bool alt);
@@ -57,6 +67,8 @@ namespace oc4::render
 	private:
 		using Item = MapWindow::UiItem;
 		bool inside(const Item& item, int x, int y) const;
+		// What can be reached now: nothing clipped away or covered by a screen on top.
+		std::vector<int> reachable() const;
 		// The theme's look for the item's style, in its state (toggled: a checkbox that is on);
 		// false if the theme has no such button.
 		bool themedButton(Overlay& o, const Item& it, int index, bool hot, bool toggled);
@@ -81,6 +93,8 @@ namespace oc4::render
 		std::array<float, 5> m_sizes{ 10, 12, 14, 16, 22 }; // the markup's <font=0..4> (the theme's)
 		std::vector<Item> m_items;
 		int m_hover = -1, m_pressed = -1;
+		bool m_keyHover = false; // m_hover is the keyboard's
+		Item m_keyItem;          // (to find it again when the items are made again)
 		Item m_pressedItem;          // (to find it again when the items are made again)
 		int m_mouseX = -1, m_mouseY = -1;
 		bool m_pressedRight = false;

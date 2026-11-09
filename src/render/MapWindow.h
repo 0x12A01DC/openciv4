@@ -45,9 +45,32 @@ namespace oc4::render
 		void lookAt(int x, int y, float distanceInPlots = 9);
 		// Moves the camera over the plot, keeping its distance.
 		void centerOn(int x, int y);
-		// The size of what it renders, in pixels.
+		// The interface's size: its units (UiScale.h), which the screens, the mouse and the
+		// click positions are in.
 		uint32_t width() const;
 		uint32_t height() const;
+		// A menu or a screen is up over the map: Tab starts choosing on it with the keys, then the
+		// arrows choose instead of moving the map and Return and Space use what they chose. With
+		// no map behind it (the main menu) the arrows choose at once.
+		void setUiTakesKeys(bool takes, bool mapBehind = true);
+		// The keyboard's choice ends (a talk's answers changed: Return is the talk's again).
+		void clearKeyChoice();
+		void pressKey(unsigned key); // (as if typed)
+		// W A S D pan the map as the arrows do (the letters alone, no menu up; WasdPan.h).
+		// Ctrl+Shift+W turns it off (only while on: BtS has the key too): takeWasdPanToggle has what it was changed to since last asked.
+		void setWasdPan(bool on);
+		bool wasdPan() const;
+		std::optional<bool> takeWasdPanToggle();
+		// The frame rate in the corner (Ctrl+Shift+F changes it).
+		void setFrameRateShown(bool shown);
+		// The interface's scale in percent, 0 for the window's density.
+		void setUiScale(int percent);
+		struct UiDisplay
+		{
+			uint32_t width = 0, height = 0; // pixels
+			float density = 1;
+		};
+		UiDisplay uiDisplay() const;
 		// Renders a frame (dt seconds after the last) and shows it.
 		void frame(float dt);
 		void saveScreenshot(const std::filesystem::path& png);
@@ -176,6 +199,7 @@ namespace oc4::render
 			int flags = 1;      // 1 left, 2 right, 4 centred (x0 is the anchor)
 			bool state = false, enabled = true;
 			bool interactive = false; // takes clicks and has help
+			bool mainInterface = false; // the main interface's: under a menu the keys do not reach it
 			bool blocks = false;      // a screen's own panel or picture over the main interface: what is under it takes no clicks
 			bool hasColor = false;
 			Color color{};

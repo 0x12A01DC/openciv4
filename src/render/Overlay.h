@@ -1,7 +1,9 @@
 #pragma once
 
-// Text, pictures and simple shapes in screen pixels over a rendered frame: triangles with soft
-// edges, the glyphs from an atlas, drawn by the renderer when the overlay ends.
+// Text, pictures and simple shapes over a rendered frame: triangles with soft edges, the glyphs
+// from an atlas, drawn by the renderer when the overlay ends. Everything here is in the
+// interface's units, setScale of the frame's pixels each (see UiScale.h); text is rasterized at
+// the pixels' size and stays sharp.
 
 #include "render/ButtonArt.h"
 #include "render/Font.h"
@@ -86,8 +88,12 @@ namespace oc4::render
 		void clip(float x0, float y0, float x1, float y1);
 		void unclip();
 
-		float screenWidth() const { return float(m_renderer.width()); }
-		float screenHeight() const { return float(m_renderer.height()); }
+		// In the interface's units, as all the rest.
+		float screenWidth() const { return float(m_renderer.width()) / m_scale; }
+		float screenHeight() const { return float(m_renderer.height()) / m_scale; }
+		// Pixels to a unit.
+		void setScale(float scale) { m_scale = scale; }
+		float scale() const { return m_scale; }
 
 	private:
 		// Marked up or plain text laid out, kept while it is drawn (the same names and numbers come every frame).
@@ -104,6 +110,7 @@ namespace oc4::render
 
 		void use(const GpuImage* image);
 		void vertex(float x, float y, uint32_t color, float u = 0, float v = 0);
+		void pixelVertex(float x, float y, uint32_t color, float u, float v); // (x, y in pixels)
 		void fillConvex(const std::vector<std::array<float, 2>>& points, uint32_t color);
 		void strokeClosed(const std::vector<std::array<float, 2>>& points, float width, uint32_t color);
 		void flush();
@@ -125,6 +132,7 @@ namespace oc4::render
 		Renderer& m_renderer;
 		Fonts m_fonts;
 		bool m_drawing = false;
+		float m_scale = 1;
 		std::vector<OverlayVertex> m_vertices;
 		std::vector<OverlayDraw> m_draws;
 		std::vector<std::array<int32_t, 4>> m_clips;

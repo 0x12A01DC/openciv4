@@ -29,7 +29,7 @@ namespace oc4::render
 		bool contains(int x, int y) const { return active() && m_panel.contains(float(x), float(y)); }
 
 		// Input in window pixels. While it is up the panel takes every click and key; the
-		// wheel only over it.
+		// wheel only over it. The arrows go through what can be chosen, and Return does it.
 		void hover(int x, int y);
 		bool click(int x, int y);
 		bool wheel(int x, int y, int delta);
@@ -39,6 +39,8 @@ namespace oc4::render
 		std::optional<MapWindow::PopupAnswer> takeAnswer() { return std::exchange(m_answer, std::nullopt); }
 
 		void draw(Overlay& overlay, const std::function<std::string(int item)>& help);
+		// The keys have chosen something (Tab started it): the arrows are the popup's, not the map's.
+		bool keyboardChoice() const { return m_keyboard; }
 
 	private:
 		struct Rect
@@ -47,6 +49,8 @@ namespace oc4::render
 			bool contains(float x, float y) const { return x >= x0 && x < x1 && y >= y0 && y < y1; }
 		};
 		void answer(int item);
+		void choose(int item); // as a click on it
+		void moveChoice(int delta);
 
 		ButtonArt& m_art;
 		Theme& m_theme;
@@ -65,6 +69,8 @@ namespace oc4::render
 		std::vector<Rect> m_items; // where each item was drawn (empty: not shown)
 		int m_hover = -1, m_helpItem = -2;
 		bool m_hoverOk = false;
+		bool m_keyboard = false; // what m_hover says was chosen with the keys, not the mouse
+		int m_scrollTo = -1;     // the item to bring into the list at the next draw
 		std::wstring m_help;
 		int m_mouseX = -1, m_mouseY = -1;
 	};

@@ -97,6 +97,80 @@ namespace oc4::render
 				}
 		}
 		m_hover = m_mouseX >= 0 ? hit(m_mouseX, m_mouseY) : m_hover < int(m_items.size()) ? m_hover : -1;
+		// (the keyboard's choice: the same item, or what is now nearest it)
+		if (m_keyHover)
+		{
+			const NavRect was{ std::min(m_keyItem.x0, m_keyItem.x1), m_keyItem.y0, std::max(m_keyItem.x0, m_keyItem.x1), m_keyItem.y1 };
+			int nearest = -1;
+			float best = 0;
+			for (const int i : reachable())
+			{
+				const Item& it = m_items[size_t(i)];
+				const float dx = (it.x0 + it.x1) / 2 - was.cx(), dy = (it.y0 + it.y1) / 2 - was.cy(), d = dx * dx + dy * dy;
+				if (nearest < 0 || d < best)
+					nearest = i, best = d;
+			}
+			m_hover = nearest;
+			m_keyHover = nearest >= 0;
+			if (m_keyHover)
+				m_keyItem = m_items[size_t(nearest)];
+		}
+	}
+
+	std::vector<int> UiLayer::reachable() const
+	{
+		std::vector<int> out;
+		for (size_t i = 0; i < m_items.size(); ++i)
+			if (const Item& it = m_items[i]; it.interactive && !it.mainInterface && std::abs(it.x1 - it.x0) >= 1 && it.y1 - it.y0 >= 1 &&
+				hit(int((it.x0 + it.x1) / 2), int((it.y0 + it.y1) / 2)) == int(i))
+				out.push_back(int(i));
+		return out;
+	}
+
+	bool UiLayer::moveChoice(NavDirection direction, bool wrap)
+	{
+		const std::vector<int> items = reachable();
+		std::vector<NavRect> rects;
+		int from = -1;
+		for (const int i : items)
+		{
+			const Item& it = m_items[size_t(i)];
+			if (m_keyHover && i == m_hover)
+				from = int(rects.size());
+			rects.push_back({ std::min(it.x0, it.x1), it.y0, std::max(it.x0, it.x1), it.y1 });
+		}
+		const int next = wrap ? navWrap(rects, from, direction) : navNearest(rects, from, direction);
+		if (next < 0)
+			return false;
+		m_hover = items[size_t(next)];
+		m_keyHover = true;
+		m_keyItem = m_items[size_t(m_hover)];
+		m_mouseX = m_mouseY = -1;
+		return true;
+	}
+
+	int UiLayer::useKeyChoice()
+	{
+		const int used = m_hover;
+		const Item chosen = m_items[size_t(used)];
+		if (chosen.style == "__option")
+		{
+			const Item* box = nullptr;
+			for (const Item& it : m_items)
+				if (it.kind == Kind::Dropdown && it.style != "__option" && it.x0 == chosen.x0 && it.y0 < chosen.y0 && (!box || it.y0 > box->y0))
+					box = &it;
+			if (box)
+				m_keyItem = *box;
+		}
+		return used;
+	}
+
+	std::pair<int, int> UiLayer::keyChoicePlace() const
+	{
+		if (!keyChoice())
+			return { -1, -1 };
+		const Item& it = m_items[size_t(m_hover)];
+		return { int((it.x0 + it.x1) / 2), int((it.y0 + it.y1) / 2) };
 	}
 
 	bool UiLayer::inside(const Item& item, int x, int y) const
@@ -159,6 +233,7 @@ namespace oc4::render
 		m_mouseX = x;
 		m_mouseY = y;
 		m_hover = hit(x, y);
+		m_keyHover = false;
 	}
 
 	float UiLayer::fontSize(int font) const
@@ -558,6 +633,13 @@ namespace oc4::render
 		}
 		// The help for what is under the mouse, in the help area (growing up from it unless it
 		// expands down).
+		// (what the keyboard chose: the mouse's highlight alone is too faint to follow)
+		if (keyChoice())
+		{
+			const Item& it = m_items[size_t(m_hover)];
+			const float x0 = std::min(it.x0, it.x1), x1 = std::max(it.x0, it.x1);
+			o.frame(x0 - 2, it.y0 - 2, x1 + 2, it.y1 + 2, kHot, 1, 3, 2);
+		}
 		if (!m_help.empty())
 		{
 			// A help taller than the room it grows into gets wider, then is kept on the screen.
