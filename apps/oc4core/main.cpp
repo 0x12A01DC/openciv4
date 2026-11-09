@@ -1604,6 +1604,8 @@ namespace
 					typed = now;
 				}
 			choice = screens.takeMenuChoice();
+			// (full screen as in a game, when the profile says so; the options' box too)
+			window.setFullscreen(utility.graphicOptionChosen(GC.getInfoTypeForString("GRAPHICOPTION_FULLSCREEN", true)));
 			sounds.update({}, "");
 			window.frame(std::min(std::chrono::duration<float>(now - last).count(), 0.1f));
 			last = now;
