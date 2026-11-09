@@ -344,7 +344,10 @@ namespace oc4::host
 		host.def("ui_mirrors_selection_group", [&ui] { return ui.mirrorsSelectionGroup(); });
 		host.def("ui_selection_plot", [&ui] {
 			const CvPlot* p = ui.getSelectionPlot();
-			return p ? py::make_tuple(p->getX(), p->getY()) : py::make_tuple(-1, -1);
+			if (!p)
+				return py::make_tuple(-1, -1);
+			const auto [x, y] = gameCorePlot({ p->getX(), p->getY() });
+			return py::make_tuple(x, y);
 		});
 		host.def("ui_select_unit", [&ui](int owner, int id, bool clear, bool toggle) {
 			if (CvUnit* u = unitOf(owner, id))
@@ -406,7 +409,12 @@ namespace oc4::host
 		// The WorldBuilder: its mode, the mouse over the map (oc4wb, CyInterface)
 		host.def("ui_set_world_builder", [&ui](bool on) { ui.setWorldBuilder(on); });
 		host.def("ui_world_builder", [&ui] { return ui.worldBuilder(); });
-		host.def("ui_mouse_plot", [&ui] { return py::make_tuple(ui.mouseX, ui.mouseY); });
+		host.def("ui_mouse_plot", [&ui] {
+			if (ui.mouseX < 0)
+				return py::make_tuple(ui.mouseX, ui.mouseY);
+			const auto [x, y] = gameCorePlot({ ui.mouseX, ui.mouseY });
+			return py::make_tuple(x, y);
+		});
 		host.def("ui_mouse_buttons", [&ui] { return py::make_tuple(ui.mouseLeft, ui.mouseRight); });
 		host.def("ui_mouse_over_map", [&ui] { return ui.mouseOverMap; });
 		host.def("ui_key", [](int which) {
